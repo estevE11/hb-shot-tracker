@@ -39,12 +39,14 @@ const popup = {
 
 // --- New grid logic ---
 let gridNumbers = [1,2,3,4,5,6,7,8,9,10];
+let selectedNumberIndex = null;
 
 function renderGrid() {
     const grid = document.getElementById('list');
     let html = '<div id="number-grid" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;">';
     for (let i = 0; i < gridNumbers.length; i++) {
-        html += `<button class="grid-btn" onclick="onGridButtonClick(${i})">${gridNumbers[i]}</button>`;
+        const selectedClass = (i === selectedNumberIndex) ? 'selected' : '';
+        html += `<button class="grid-btn ${selectedClass}" onclick="onGridButtonClick(${i})">${gridNumbers[i]}</button>`;
     }
     html += `<button class="grid-btn add-btn" onclick="onAddGridButton()">Add</button>`;
     html += '</div>';
@@ -52,8 +54,8 @@ function renderGrid() {
 }
 
 function onGridButtonClick(i) {
-    alert('Button ' + gridNumbers[i] + ' clicked');
-    // You can add your logic here for what happens when a number button is clicked
+    selectedNumberIndex = i;
+    renderGrid();
 }
 
 function onAddGridButton() {
@@ -100,22 +102,25 @@ const loop = () => {
     const scaledHeight = canvas.width * ratio;
     ctx.drawImage(bg, 0, 0, canvas.width, scaledHeight);
 
-    // Render all saved shots
-    for (let i = 0; i < data.length; i++) {
-        const d = data[i];
-        const p0 = pitchToCanvas(Number(d.x0), Number(d.y0));
-        const p1 = pitchToCanvas(Number(d.x1), Number(d.y1));
-        const p2 = pitchToCanvas(Number(d.x2), Number(d.y2));
-        ctx.beginPath();
-        ctx.moveTo(p0.x, p0.y);
-        ctx.lineTo(p1.x, p1.y);
-        ctx.lineTo(p2.x, p2.y);
-        ctx.strokeStyle = d.goal ? 'green' : 'red';
-        ctx.lineWidth = 2;
-        ctx.stroke();
-        renderCircle(p0.x, p0.y);
-        renderCircle(p1.x, p1.y);
-        renderCircle(p2.x, p2.y);
+    // Render only shots for the selected number
+    if (selectedNumberIndex !== null) {
+        for (let i = 0; i < data.length; i++) {
+            const d = data[i];
+            if (d.number !== gridNumbers[selectedNumberIndex]) continue;
+            const p0 = pitchToCanvas(Number(d.x0), Number(d.y0));
+            const p1 = pitchToCanvas(Number(d.x1), Number(d.y1));
+            const p2 = pitchToCanvas(Number(d.x2), Number(d.y2));
+            ctx.beginPath();
+            ctx.moveTo(p0.x, p0.y);
+            ctx.lineTo(p1.x, p1.y);
+            ctx.lineTo(p2.x, p2.y);
+            ctx.strokeStyle = d.goal ? 'green' : 'red';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            renderCircle(p0.x, p0.y);
+            renderCircle(p1.x, p1.y);
+            renderCircle(p2.x, p2.y);
+        }
     }
 
     if (firstPointIn()) {
@@ -144,6 +149,10 @@ const loop = () => {
 }
 
 const onClick = (e) => {
+    if (selectedNumberIndex === null) {
+        alert('Please select a number before registering a shot.');
+        return;
+    }
     const rect = canvas.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
@@ -241,9 +250,9 @@ const addData = (goal) => {
         y1: pos1.y.toFixed(3),
         x2: pos2.x.toFixed(3),
         y2: pos2.y.toFixed(3),
-        goal: goal
+        goal: goal,
+        number: gridNumbers[selectedNumberIndex]
     };
-
     data.push(newData);
 }
 
