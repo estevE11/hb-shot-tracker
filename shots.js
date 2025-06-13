@@ -69,7 +69,9 @@ const start = () => {
 }
 
 const loop = () => {
-    ctx.drawImage(bg, 0, 0, bg.width*2, bg.height*2);
+    const ratio = bg.height / bg.width;
+    const scaledHeight = canvas.width * ratio;
+    ctx.drawImage(bg, 0, 0, canvas.width, scaledHeight);
 
     if (firstPointIn()) {
         renderCircle(p0.x, p0.y);
