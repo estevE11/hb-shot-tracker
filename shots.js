@@ -1,4 +1,4 @@
-const canvasWidth = 800, canvasHeight = 800;
+let canvasWidth = 800, canvasHeight = 800;
 
 var canvas, ctx;
 
@@ -38,11 +38,26 @@ const popup = {
 };
 
 const start = () => {
+    function resizeCanvas() {
+        canvasWidth = window.innerWidth;
+        canvasHeight = canvasWidth; // 1:1 aspect ratio
+        if (canvas) {
+            canvas.width = canvasWidth;
+            canvas.height = canvasHeight;
+            console.log(canvasWidth, canvasHeight);
+        }
+        // Adjust pitchBounds to scale with canvas size
+        pitchBounds.x = canvasWidth * 0.05;
+        pitchBounds.y = canvasHeight * 0.07;
+        pitchBounds.w = canvasWidth * 0.91;
+        pitchBounds.h = canvasHeight * 0.91;
+    }
+
     canvas = document.createElement('canvas');
     ctx = canvas.getContext('2d');
-    canvas.width = canvasWidth;
-    canvas.height = canvasHeight;
     document.getElementById('canvas-container').appendChild(canvas);
+    resizeCanvas();
+    window.addEventListener('resize', resizeCanvas);
 
     canvas.addEventListener('click', onClick);
     canvas.addEventListener('contextmenu', (e) => {
