@@ -7,6 +7,7 @@ bg.src = 'hbpitch.png';
 
 var p0 = {x: -1, y: -1};
 var p1 = {x: -1, y: -1};
+var p2 = {x: -1, y: -1};
 
 let pitchBounds = {
     x: 40,
@@ -52,18 +53,25 @@ const start = () => {
     window.requestAnimationFrame(loop);
 }
 
-// TODO: Render points on hover list element
 const loop = () => {
     ctx.drawImage(bg, 0, 0, bg.width*2, bg.height*2);
 
-    if (firstPointIn())
+    if (firstPointIn()) {
         renderCircle(p0.x, p0.y);
+    }
     if (secondPointIn()) {
         ctx.beginPath();
         ctx.moveTo(p0.x, p0.y);
         ctx.lineTo(p1.x, p1.y);
         ctx.stroke();
         renderCircle(p1.x, p1.y);
+    }
+    if (thirdPointIn()) {
+        ctx.beginPath();
+        ctx.moveTo(p1.x, p1.y);
+        ctx.lineTo(p2.x, p2.y);
+        ctx.stroke();
+        renderCircle(p2.x, p2.y);
     }
 
     if (popupActive()) renderPopup();
@@ -76,7 +84,7 @@ const onClick = (e) => {
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
 
-    if (firstPointIn() && secondPointIn()) {
+    if (allPointsIn()) {
         if(isMouseInPopupButton(x, y, popup.buttonGoal)) {
             addData(true);
             resetPoints();
@@ -88,13 +96,16 @@ const onClick = (e) => {
         }
     }
 
-    // TODO: First click only works outisde the area
     const pitchCoords = canvasToPitch(x, y);
     if(pitchCoords.x < 0 || pitchCoords.x > 1 || pitchCoords.y < 0 || pitchCoords.y > 1) return;
-    if (!firstPointIn()) p0 = pitchToCanvas(pitchCoords.x, pitchCoords.y);
-    else {
+    
+    if (!firstPointIn()) {
+        p0 = pitchToCanvas(pitchCoords.x, pitchCoords.y);
+    } else if (!secondPointIn()) {
         p1 = pitchToCanvas(pitchCoords.x, pitchCoords.y);
-        setPopupPositionFromLastPoint(p1.x, p1.y);
+    } else if (!thirdPointIn()) {
+        p2 = pitchToCanvas(pitchCoords.x, pitchCoords.y);
+        setPopupPositionFromLastPoint(p2.x, p2.y);
     }
 }
 
@@ -148,23 +159,35 @@ const secondPointIn = () => {
     return p1.x != -1;
 }
 
+const thirdPointIn = () => {
+    return p2.x != -1;
+}
+
+const allPointsIn = () => {
+    return firstPointIn() && secondPointIn() && thirdPointIn();
+}
+
 const resetPoints = () => {
     p0 = {x: -1, y: -1};
     p1 = {x: -1, y: -1};
+    p2 = {x: -1, y: -1};
 }
 
 const popupActive = () => {
-    return firstPointIn() && secondPointIn();
+    return allPointsIn();
 }
 
 const addData = (goal) => {
     const pos0 = canvasToPitch(p0.x, p0.y);
     const pos1 = canvasToPitch(p1.x, p1.y);
+    const pos2 = canvasToPitch(p2.x, p2.y);
     const newData = {
         x0: pos0.x.toFixed(3),
         y0: pos0.y.toFixed(3),
         x1: pos1.x.toFixed(3),
         y1: pos1.y.toFixed(3),
+        x2: pos2.x.toFixed(3),
+        y2: pos2.y.toFixed(3),
         goal: goal
     };
 
@@ -189,7 +212,7 @@ const listOnClick = (i) => {
 
 const listElementTemplate = (i, d) => {
     return `<li class="list-element" onclick="listOnClick(${i})">
-                ${i+1}: (${d.x0}, ${d.y0}) -> (${d.x1}, ${d.y1}) -> ${d.goal ? 'Goal' : 'No goal'}
+                ${i+1}: (${d.x0}, ${d.y0}) -> (${d.x1}, ${d.y1}) -> (${d.x2}, ${d.y2}) -> ${d.goal ? 'Goal' : 'No goal'}
             </li>`;
 }
 
