@@ -37,7 +37,34 @@ const popup = {
     }
 };
 
-const start = () => {
+// --- New grid logic ---
+let gridNumbers = [1,2,3,4,5,6,7,8,9,10];
+
+function renderGrid() {
+    const grid = document.getElementById('list');
+    let html = '<div id="number-grid" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;">';
+    for (let i = 0; i < gridNumbers.length; i++) {
+        html += `<button class="grid-btn" onclick="onGridButtonClick(${i})">${gridNumbers[i]}</button>`;
+    }
+    html += `<button class="grid-btn add-btn" onclick="onAddGridButton()">Add</button>`;
+    html += '</div>';
+    grid.innerHTML = html;
+}
+
+function onGridButtonClick(i) {
+    alert('Button ' + gridNumbers[i] + ' clicked');
+    // You can add your logic here for what happens when a number button is clicked
+}
+
+function onAddGridButton() {
+    const val = prompt('Enter a new number or label:');
+    if (val && val.trim() !== '') {
+        gridNumbers.push(val.trim());
+        renderGrid();
+    }
+}
+
+let start = () => {
     function resizeCanvas() {
         canvasWidth = window.innerWidth;
         canvasHeight = canvasWidth; // 1:1 aspect ratio
@@ -218,28 +245,13 @@ const addData = (goal) => {
     };
 
     data.push(newData);
-    renderData();
 }
 
-const renderData = () => {
-    let list = document.getElementById('list');
-    let html = '';
-    for(let i = data.length-1; i > -1; i--) {
-        const d = data[i];
-        html += listElementTemplate(i, d);
-    }
-    list.innerHTML = html;
-}
-
-const listOnClick = (i) => {
-    data.splice(i, 1);
-    renderData();
-}
-
-const listElementTemplate = (i, d) => {
-    return `<li class="list-element" onclick="listOnClick(${i})">
-                ${i+1}: (${d.x0}, ${d.y0}) -> (${d.x1}, ${d.y1}) -> (${d.x2}, ${d.y2}) -> ${d.goal ? 'Goal' : 'No goal'}
-            </li>`;
+// Call renderGrid after canvas is initialized
+const originalStart = start;
+start = function() {
+    originalStart();
+    renderGrid();
 }
 
 window.onload = start;

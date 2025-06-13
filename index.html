@@ -6,16 +6,30 @@
     <meta name="theme-color" content="#000000">
     <link rel="manifest" href="manifest.json">
     <link rel="apple-touch-icon" href="icons/icon-192x192.png">
+    <script src="lib/dexie.js"></script>
 </head>
 <body>
 <style>
-    .list-element {
+    .grid-btn {
+        padding: 16px 0;
+        font-size: 1.2em;
+        border: 1px solid #ccc;
+        border-radius: 8px;
+        background: #f9f9f9;
         cursor: pointer;
-
+        transition: background 0.2s, color 0.2s;
     }
-
-    .list-element:hover {
-        color: #ff0000;
+    .grid-btn:hover {
+        background: #007bff;
+        color: #fff;
+    }
+    .add-btn {
+        background: #28a745;
+        color: #fff;
+        font-weight: bold;
+    }
+    .add-btn:hover {
+        background: #218838;
     }
     #canvas-container {
         width: 100vw;
