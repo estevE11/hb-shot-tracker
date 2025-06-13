@@ -73,6 +73,24 @@ const loop = () => {
     const scaledHeight = canvas.width * ratio;
     ctx.drawImage(bg, 0, 0, canvas.width, scaledHeight);
 
+    // Render all saved shots
+    for (let i = 0; i < data.length; i++) {
+        const d = data[i];
+        const p0 = pitchToCanvas(Number(d.x0), Number(d.y0));
+        const p1 = pitchToCanvas(Number(d.x1), Number(d.y1));
+        const p2 = pitchToCanvas(Number(d.x2), Number(d.y2));
+        ctx.beginPath();
+        ctx.moveTo(p0.x, p0.y);
+        ctx.lineTo(p1.x, p1.y);
+        ctx.lineTo(p2.x, p2.y);
+        ctx.strokeStyle = d.goal ? 'green' : 'red';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        renderCircle(p0.x, p0.y);
+        renderCircle(p1.x, p1.y);
+        renderCircle(p2.x, p2.y);
+    }
+
     if (firstPointIn()) {
         renderCircle(p0.x, p0.y);
     }
@@ -80,6 +98,8 @@ const loop = () => {
         ctx.beginPath();
         ctx.moveTo(p0.x, p0.y);
         ctx.lineTo(p1.x, p1.y);
+        ctx.strokeStyle = 'black';
+        ctx.lineWidth = 1;
         ctx.stroke();
         renderCircle(p1.x, p1.y);
     }
@@ -87,11 +107,11 @@ const loop = () => {
         ctx.beginPath();
         ctx.moveTo(p1.x, p1.y);
         ctx.lineTo(p2.x, p2.y);
+        ctx.strokeStyle = 'black';
+        ctx.lineWidth = 1;
         ctx.stroke();
         renderCircle(p2.x, p2.y);
     }
-
-    if (popupActive()) renderPopup();
 
     window.requestAnimationFrame(loop);
 }
@@ -100,18 +120,6 @@ const onClick = (e) => {
     const rect = canvas.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
-
-    if (allPointsIn()) {
-        if(isMouseInPopupButton(x, y, popup.buttonGoal)) {
-            addData(true);
-            resetPoints();
-            return;
-        } else if(isMouseInPopupButton(x, y, popup.buttonNoGoal)) {
-            addData(false);
-            resetPoints();
-            return;
-        }
-    }
 
     const pitchCoords = canvasToPitch(x, y);
     if(pitchCoords.x < 0 || pitchCoords.x > 1 || pitchCoords.y < 0 || pitchCoords.y > 1) return;
@@ -122,7 +130,8 @@ const onClick = (e) => {
         p1 = pitchToCanvas(pitchCoords.x, pitchCoords.y);
     } else if (!thirdPointIn()) {
         p2 = pitchToCanvas(pitchCoords.x, pitchCoords.y);
-        setPopupPositionFromLastPoint(p2.x, p2.y);
+        addData(false);
+        resetPoints();
     }
 }
 
