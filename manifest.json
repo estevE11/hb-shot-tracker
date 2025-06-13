@@ -2,7 +2,7 @@
   "name": "Shot Tracker",
   "short_name": "ShotTracker",
   "description": "Track your shots",
-  "start_url": "/",
+  "start_url": "/hb-shot-tracker",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#000000",
