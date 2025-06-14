@@ -2,6 +2,7 @@
 const db = new Dexie('ShotTrackerDB');
 db.version(1).stores({
     teams: '++id, name, created_at',
+    players: '++id, team_id, number, [team_id+number]',
     matches: '++id, team1_id, team2_id, name, date, created_at',
     shots: '++id, match_id, team_id, player_number, x0, y0, x1, y1, x2, y2, goal, created_at, [match_id+team_id], [team_id+player_number], [match_id+team_id+player_number]'
 });
@@ -20,11 +21,29 @@ const DatabaseManager = {
     },
 
     // Team operations
-    async addTeam(name) {
-        return await db.teams.add({
-            name: name.trim(),
-            created_at: new Date()
-        });
+    async addTeam(name, playerNumbers) {
+        try {
+            // Add team
+            const teamId = await db.teams.add({
+                name: name.trim(),
+                created_at: new Date()
+            });
+            
+            // Add players for this team
+            const playerPromises = playerNumbers.map(number => 
+                db.players.add({
+                    team_id: teamId,
+                    number: number
+                })
+            );
+            
+            await Promise.all(playerPromises);
+            
+            return teamId;
+        } catch (error) {
+            console.error('Error adding team and players:', error);
+            throw error;
+        }
     },
 
     async getTeams() {
@@ -33,6 +52,10 @@ const DatabaseManager = {
 
     async getTeam(id) {
         return await db.teams.get(id);
+    },
+    
+    async getTeamPlayers(teamId) {
+        return await db.players.where('team_id').equals(teamId).toArray();
     },
 
     // Match operations

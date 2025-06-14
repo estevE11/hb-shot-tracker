@@ -86,13 +86,92 @@ const MenuManager = {
     // Add new team
     async addTeam() {
         const name = prompt('Enter team name:');
-        if (name && name.trim()) {
-            try {
-                await DatabaseManager.addTeam(name);
-                this.loadTeams();
-            } catch (error) {
-                console.error('Error adding team:', error);
-            }
+        if (!name || !name.trim()) return;
+        
+        // Create team creation modal
+        this.createTeamModal(name.trim());
+    },
+    
+    // Create team creation modal
+    createTeamModal(teamName) {
+        const modal = document.createElement('div');
+        modal.style.cssText = `
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
+            background: rgba(0,0,0,0.5); display: flex; align-items: center; 
+            justify-content: center; z-index: 1000;
+        `;
+        
+        modal.innerHTML = `
+            <div style="background: white; padding: 30px; border-radius: 12px; max-width: 500px; width: 90%; max-height: 80%; overflow-y: auto;">
+                <h3 style="margin-bottom: 20px;">Create Team: ${teamName}</h3>
+                <div style="margin-bottom: 20px;">
+                    <label style="display: block; margin-bottom: 10px; font-weight: bold;">Player Numbers:</label>
+                    <div style="margin-bottom: 10px; color: #666; font-size: 0.9em;">
+                        Enter player numbers separated by commas (e.g., 1,2,3,7,10,15)
+                    </div>
+                    <input type="text" id="player-numbers" placeholder="1,2,3,4,5,6,7,8,9,10" 
+                           value="1,2,3,4,5,6,7,8,9,10"
+                           style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                    <div id="player-preview" style="margin-top: 10px; padding: 10px; background: #f8f9fa; border-radius: 4px; min-height: 40px;">
+                        <strong>Preview:</strong> <span id="preview-text">1, 2, 3, 4, 5, 6, 7, 8, 9, 10</span>
+                    </div>
+                </div>
+                <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                    <button onclick="this.closest('div').parentElement.remove()" 
+                            style="padding: 8px 16px; background: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                        Cancel
+                    </button>
+                    <button onclick="MenuManager.createTeamFromModal('${teamName}')" 
+                            style="padding: 8px 16px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                        Create Team
+                    </button>
+                </div>
+            </div>
+        `;
+        
+        document.body.appendChild(modal);
+        
+        // Add real-time preview
+        const input = modal.querySelector('#player-numbers');
+        const previewText = modal.querySelector('#preview-text');
+        
+        input.addEventListener('input', () => {
+            const numbers = this.parsePlayerNumbers(input.value);
+            previewText.textContent = numbers.length > 0 ? numbers.join(', ') : 'No valid numbers';
+            previewText.style.color = numbers.length > 0 ? '#333' : '#dc3545';
+        });
+    },
+    
+    // Parse player numbers from input
+    parsePlayerNumbers(input) {
+        return input.split(',')
+            .map(num => parseInt(num.trim()))
+            .filter(num => !isNaN(num) && num > 0)
+            .sort((a, b) => a - b)
+            .filter((num, index, arr) => arr.indexOf(num) === index); // Remove duplicates
+    },
+    
+    // Create team from modal
+    async createTeamFromModal(teamName) {
+        const input = document.getElementById('player-numbers').value;
+        const playerNumbers = this.parsePlayerNumbers(input);
+        
+        if (playerNumbers.length === 0) {
+            alert('Please enter at least one valid player number.');
+            return;
+        }
+        
+        try {
+            await DatabaseManager.addTeam(teamName, playerNumbers);
+            
+            // Remove modal
+            document.querySelector('div[style*="position: fixed"]').remove();
+            
+            // Reload teams list
+            this.loadTeams();
+        } catch (error) {
+            console.error('Error creating team:', error);
+            alert('Error creating team. Please try again.');
         }
     },
     
@@ -100,22 +179,29 @@ const MenuManager = {
     async loadTeamDetail(team) {
         document.getElementById('team-detail-title').textContent = team.name;
         
-        // Load player grid
-        const playersGrid = document.getElementById('team-players-grid');
-        let playersHtml = '';
-        
-        AppState.gridNumbers.forEach((number, index) => {
-            playersHtml += `
-                <button class="player-btn" onclick="MenuManager.showPlayerStats(${team.id}, ${number}, '${team.name}')">
-                    ${number}
-                </button>
-            `;
-        });
-        
-        playersGrid.innerHTML = playersHtml;
-        
-        // Load matches
         try {
+            // Load team's player numbers
+            const players = await DatabaseManager.getTeamPlayers(team.id);
+            const playerNumbers = players.map(p => p.number).sort((a, b) => a - b);
+            
+            // Load player grid with team's specific player numbers
+            const playersGrid = document.getElementById('team-players-grid');
+            let playersHtml = '';
+            
+            playerNumbers.forEach((number, index) => {
+                playersHtml += `
+                    <button class="player-btn" onclick="MenuManager.showPlayerStats(${team.id}, ${number}, '${team.name}')">
+                        ${number}
+                    </button>
+                `;
+            });
+            
+            playersGrid.innerHTML = playersHtml;
+            
+            // Update AppState to use this team's player numbers
+            AppState.gridNumbers = playerNumbers;
+            
+            // Load matches
             const matches = await DatabaseManager.getMatchesForTeam(team.id);
             const teams = await DatabaseManager.getTeams();
             const teamMap = {};
@@ -263,6 +349,14 @@ const MenuManager = {
             const team1 = await DatabaseManager.getTeam(match.team1_id);
             const team2 = await DatabaseManager.getTeam(match.team2_id);
             
+            // Get current team's player numbers
+            const currentTeamId = AppState.currentMatchTeam === 1 ? match.team1_id : match.team2_id;
+            const currentTeamPlayers = await DatabaseManager.getTeamPlayers(currentTeamId);
+            const playerNumbers = currentTeamPlayers.map(p => p.number).sort((a, b) => a - b);
+            
+            // Update AppState to use current team's player numbers
+            AppState.gridNumbers = playerNumbers;
+            
             // Create team swap button and current team display
             const playersGrid = document.getElementById('match-players-grid');
             const currentTeamData = AppState.currentMatchTeam === 1 ? team1 : team2;
@@ -281,7 +375,7 @@ const MenuManager = {
                 </div>
             `;
             
-            AppState.gridNumbers.forEach((number, index) => {
+            playerNumbers.forEach((number, index) => {
                 const selectedClass = (index === AppState.selectedPlayerIndex) ? 'selected' : '';
                 playersHtml += `
                     <button class="player-btn ${selectedClass}" onclick="MenuManager.selectPlayer(${index})">

@@ -10,7 +10,7 @@ const AppState = {
     
     // Player selection
     selectedPlayerIndex: null,
-    gridNumbers: [1,2,3,4,5,6,7,8,9,10]
+    gridNumbers: [] // Will be loaded dynamically for each team
 };
 
 // Application manager - coordinates all modules
