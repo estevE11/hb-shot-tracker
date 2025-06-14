@@ -6,6 +6,7 @@ const AppState = {
     currentMatch: null,
     currentPlayer: null,
     selectedMatchFilters: new Set(),
+    selectedShotTypeFilters: new Set(), // For filtering by shot type in player stats
     currentMatchTeam: 1, // 1 for team1, 2 for team2
     
     // Player selection
@@ -76,6 +77,14 @@ function resetShot() {
     MenuManager.resetShot();
 }
 
+function togglePenalty() {
+    MenuManager.togglePenalty();
+}
+
+function toggleCounter() {
+    MenuManager.toggleCounter();
+}
+
 // Player stats functions
 function toggleAllMatches() {
     MenuManager.toggleAllMatches();
@@ -83,6 +92,14 @@ function toggleAllMatches() {
 
 function toggleMatchFilter(matchId) {
     MenuManager.toggleMatchFilter(matchId);
+}
+
+function toggleAllShotTypes() {
+    MenuManager.toggleAllShotTypes();
+}
+
+function toggleShotTypeFilter(shotType) {
+    MenuManager.toggleShotTypeFilter(shotType);
 }
 
 // Matches functions

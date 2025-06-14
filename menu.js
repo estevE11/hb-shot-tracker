@@ -389,6 +389,9 @@ const MenuManager = {
             // Initialize canvas and load shots
             CanvasManager.initializeCanvas('canvas-container');
             await CanvasManager.loadShots();
+            
+            // Initialize shot type buttons
+            this.updateShotTypeButtons();
         } catch (error) {
             console.error('Error loading match registration:', error);
         }
@@ -448,6 +451,9 @@ const MenuManager = {
             // Initialize stats canvas and load shots
             CanvasManager.initializeCanvas('canvas-container-stats');
             await CanvasManager.loadShots();
+            
+            // Initialize shot type filters UI
+            this.updateShotTypeFiltersUI();
         } catch (error) {
             console.error('Error loading player stats:', error);
         }
@@ -478,6 +484,19 @@ const MenuManager = {
         const misses = totalShots - goals;
         const accuracy = totalShots > 0 ? Math.round((goals / totalShots) * 100) : 0;
         
+        // Break down by shot type
+        const staticShots = shots.filter(shot => !shot.shot_type || shot.shot_type === 'static');
+        const penaltyShots = shots.filter(shot => shot.shot_type === 'penalty');
+        const counterShots = shots.filter(shot => shot.shot_type === 'counter');
+        
+        const staticGoals = staticShots.filter(shot => shot.goal).length;
+        const penaltyGoals = penaltyShots.filter(shot => shot.goal).length;
+        const counterGoals = counterShots.filter(shot => shot.goal).length;
+        
+        const staticAccuracy = staticShots.length > 0 ? Math.round((staticGoals / staticShots.length) * 100) : 0;
+        const penaltyAccuracy = penaltyShots.length > 0 ? Math.round((penaltyGoals / penaltyShots.length) * 100) : 0;
+        const counterAccuracy = counterShots.length > 0 ? Math.round((counterGoals / counterShots.length) * 100) : 0;
+        
         const statsContainer = document.getElementById('player-stats-info');
         statsContainer.innerHTML = `
             <div class="stat-item">
@@ -495,6 +514,30 @@ const MenuManager = {
             <div class="stat-item">
                 <div class="stat-number">${accuracy}%</div>
                 <div class="stat-label">Accuracy</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-number">${staticShots.length}</div>
+                <div class="stat-label">Static Play</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-number">${staticAccuracy}%</div>
+                <div class="stat-label">Static Accuracy</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-number">${penaltyShots.length}</div>
+                <div class="stat-label">Penalties (7m)</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-number">${penaltyAccuracy}%</div>
+                <div class="stat-label">Penalty Accuracy</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-number">${counterShots.length}</div>
+                <div class="stat-label">Counter Attacks</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-number">${counterAccuracy}%</div>
+                <div class="stat-label">Counter Accuracy</div>
             </div>
         `;
     },
@@ -571,5 +614,104 @@ const MenuManager = {
     // Reset shot points
     resetShot() {
         CanvasManager.resetCurrentShot();
+        this.updateShotTypeButtons();
+    },
+    
+    // Toggle penalty shot mode
+    togglePenalty() {
+        if (!CanvasManager.isPenaltyButtonEnabled()) return;
+        
+        const currentType = CanvasManager.getCurrentShotType();
+        const newType = currentType === 'penalty' ? 'static' : 'penalty';
+        CanvasManager.setShotType(newType);
+        this.updateShotTypeButtons();
+    },
+    
+    // Toggle counter attack mode
+    toggleCounter() {
+        if (!CanvasManager.isCounterButtonEnabled()) return;
+        
+        const currentType = CanvasManager.getCurrentShotType();
+        const newType = currentType === 'counter' ? 'static' : 'counter';
+        CanvasManager.setShotType(newType);
+        this.updateShotTypeButtons();
+    },
+    
+    // Update shot type button states
+    updateShotTypeButtons() {
+        const penaltyBtn = document.getElementById('penalty-btn');
+        const counterBtn = document.getElementById('counter-btn');
+        
+        if (!penaltyBtn || !counterBtn) return;
+        
+        const currentType = CanvasManager.getCurrentShotType();
+        const penaltyEnabled = CanvasManager.isPenaltyButtonEnabled();
+        const counterEnabled = CanvasManager.isCounterButtonEnabled();
+        
+        // Update penalty button
+        penaltyBtn.disabled = !penaltyEnabled;
+        penaltyBtn.style.opacity = penaltyEnabled ? '1' : '0.5';
+        penaltyBtn.style.background = currentType === 'penalty' ? '#dc3545' : '#ff6b6b';
+        penaltyBtn.style.borderColor = currentType === 'penalty' ? '#dc3545' : '#ff6b6b';
+        
+        // Update counter button
+        counterBtn.disabled = !counterEnabled;
+        counterBtn.style.opacity = counterEnabled ? '1' : '0.5';
+        counterBtn.style.background = currentType === 'counter' ? '#155724' : '#28a745';
+        counterBtn.style.borderColor = currentType === 'counter' ? '#155724' : '#28a745';
+    },
+    
+    // Toggle all shot types filter
+    async toggleAllShotTypes() {
+        AppState.selectedShotTypeFilters.clear();
+        if (AppState.currentPlayer) {
+            await this.loadPlayerStats(AppState.currentPlayer);
+        }
+    },
+    
+    // Toggle specific shot type filter
+    async toggleShotTypeFilter(shotType) {
+        if (AppState.selectedShotTypeFilters.has(shotType)) {
+            AppState.selectedShotTypeFilters.delete(shotType);
+        } else {
+            AppState.selectedShotTypeFilters.add(shotType);
+        }
+        
+        if (AppState.currentPlayer) {
+            await this.updatePlayerStats(AppState.currentPlayer);
+            await CanvasManager.loadShots(); // Reload shots with new filter
+        }
+        
+        // Update UI
+        this.updateShotTypeFiltersUI();
+    },
+    
+    // Update shot type filters UI
+    updateShotTypeFiltersUI() {
+        const allShotsItem = document.querySelector('#shot-type-filters-list .match-filter-item:first-child');
+        const filterItems = document.querySelectorAll('#shot-type-filters-list .match-filter-item:not(:first-child)');
+        
+        const hasActiveFilters = AppState.selectedShotTypeFilters.size > 0;
+        
+        // Update "All Shots" item
+        if (allShotsItem) {
+            const checkbox = allShotsItem.querySelector('input[type="checkbox"]');
+            const isAllSelected = !hasActiveFilters;
+            
+            allShotsItem.classList.toggle('selected', isAllSelected);
+            checkbox.checked = isAllSelected;
+        }
+        
+        // Update individual filter items
+        filterItems.forEach(item => {
+            const shotType = item.onclick.toString().match(/'([^']+)'/)?.[1];
+            if (shotType) {
+                const isSelected = AppState.selectedShotTypeFilters.has(shotType);
+                const checkbox = item.querySelector('input[type="checkbox"]');
+                
+                item.classList.toggle('selected', isSelected);
+                checkbox.checked = isSelected;
+            }
+        });
     }
-}; 
+};

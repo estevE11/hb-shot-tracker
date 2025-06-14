@@ -4,7 +4,7 @@ db.version(1).stores({
     teams: '++id, name, created_at',
     players: '++id, team_id, number, [team_id+number]',
     matches: '++id, team1_id, team2_id, name, date, created_at',
-    shots: '++id, match_id, team_id, player_number, x0, y0, x1, y1, x2, y2, goal, created_at, [match_id+team_id], [team_id+player_number], [match_id+team_id+player_number]'
+    shots: '++id, match_id, team_id, player_number, x0, y0, x1, y1, x2, y2, goal, shot_type, created_at, [match_id+team_id], [team_id+player_number], [match_id+team_id+player_number]'
 });
 
 // Database operations
@@ -84,7 +84,7 @@ const DatabaseManager = {
     },
 
     // Shot operations
-    async addShot(matchId, teamId, playerNumber, x0, y0, x1, y1, x2, y2, isGoal) {
+    async addShot(matchId, teamId, playerNumber, x0, y0, x1, y1, x2, y2, isGoal, shotType = 'static') {
         const shotData = {
             match_id: matchId,
             team_id: teamId,
@@ -96,6 +96,7 @@ const DatabaseManager = {
             x2: x2.toFixed(3),
             y2: y2.toFixed(3),
             goal: isGoal,
+            shot_type: shotType, // 'static', 'penalty', 'counter'
             created_at: new Date()
         };
 
@@ -118,14 +119,18 @@ const DatabaseManager = {
             .toArray();
     },
 
-    async getShotsForPlayer(teamId, playerNumber, matchIds = null) {
+    async getShotsForPlayer(teamId, playerNumber, matchIds = null, shotTypes = null) {
         let shotsQuery = db.shots.where(['team_id', 'player_number'])
             .equals([teamId, playerNumber]);
         
-        const shots = await shotsQuery.toArray();
+        let shots = await shotsQuery.toArray();
         
         if (matchIds && matchIds.length > 0) {
-            return shots.filter(shot => matchIds.includes(shot.match_id));
+            shots = shots.filter(shot => matchIds.includes(shot.match_id));
+        }
+        
+        if (shotTypes && shotTypes.length > 0) {
+            shots = shots.filter(shot => shotTypes.includes(shot.shot_type || 'static'));
         }
         
         return shots;

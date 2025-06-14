@@ -330,7 +330,15 @@
     
     <div id="canvas-container"></div>
     
-    <div style="display: flex; justify-content: center; margin-bottom: 20px;">
+    <div style="display: flex; justify-content: center; gap: 10px; margin-bottom: 20px;">
+        <button id="penalty-btn" class="back-btn" onclick="togglePenalty()" 
+                style="background: #ff6b6b; border-color: #ff6b6b;">
+            7m
+        </button>
+        <button id="counter-btn" class="back-btn" onclick="toggleCounter()" 
+                style="background: #28a745; border-color: #28a745;">
+            Counter
+        </button>
         <button class="back-btn" onclick="resetShot()" style="background: #dc3545; border-color: #dc3545;">
             🔄 Reset Shot
         </button>
@@ -356,6 +364,28 @@
         <div class="filter-title">Filter by matches:</div>
         <div id="match-filters-list">
             <!-- Match filters will be populated here -->
+        </div>
+    </div>
+    
+    <div class="match-filters">
+        <div class="filter-title">Filter by shot type:</div>
+        <div id="shot-type-filters-list">
+            <div class="match-filter-item selected" onclick="toggleAllShotTypes()">
+                <input type="checkbox" checked>
+                <span>All Shots</span>
+            </div>
+            <div class="match-filter-item" onclick="toggleShotTypeFilter('static')">
+                <input type="checkbox">
+                <span>Static Play</span>
+            </div>
+            <div class="match-filter-item" onclick="toggleShotTypeFilter('penalty')">
+                <input type="checkbox">
+                <span>Penalty (7m)</span>
+            </div>
+            <div class="match-filter-item" onclick="toggleShotTypeFilter('counter')">
+                <input type="checkbox">
+                <span>Counter Attack</span>
+            </div>
         </div>
     </div>
     
