@@ -1,6 +1,6 @@
 <html>
 <head>
-    <title>Register shots</title>
+    <title>Shot Tracker</title>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="theme-color" content="#000000">
@@ -10,44 +10,372 @@
 </head>
 <body>
 <style>
-    .grid-btn {
-        padding: 16px 0;
-        font-size: 1.2em;
-        border: 1px solid #ccc;
-        border-radius: 8px;
-        background: #f9f9f9;
-        cursor: pointer;
-        transition: background 0.2s, color 0.2s;
+    * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
     }
-    .grid-btn:hover {
-        background: #007bff;
-        color: #fff;
+    
+    body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        background: #f5f5f5;
     }
-    .add-btn {
-        background: #28a745;
-        color: #fff;
-        font-weight: bold;
-    }
-    .add-btn:hover {
-        background: #218838;
-    }
-    #canvas-container {
-        width: 100vw;
-        max-width: 100vw;
+    
+    .section {
+        display: none;
+        padding: 20px;
+        max-width: 1200px;
         margin: 0 auto;
+    }
+    
+    .section.active {
         display: block;
     }
+    
+    .header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 20px;
+        padding: 15px 0;
+        border-bottom: 1px solid #ddd;
+    }
+    
+    .back-btn {
+        background: #007bff;
+        color: white;
+        border: none;
+        padding: 8px 16px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 14px;
+    }
+    
+    .back-btn:hover {
+        background: #0056b3;
+    }
+    
+    h1, h2 {
+        color: #333;
+    }
+    
+    .menu-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 20px;
+        margin-top: 30px;
+    }
+    
+    .menu-item {
+        background: white;
+        padding: 30px;
+        border-radius: 12px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        cursor: pointer;
+        text-align: center;
+        transition: transform 0.2s, box-shadow 0.2s;
+    }
+    
+    .menu-item:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+    }
+    
+    .menu-item h3 {
+        color: #007bff;
+        margin-bottom: 10px;
+        font-size: 1.5em;
+    }
+    
+    .list-container {
+        background: white;
+        border-radius: 12px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        overflow: hidden;
+    }
+    
+    .list-item {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 16px 20px;
+        border-bottom: 1px solid #eee;
+        cursor: pointer;
+        transition: background 0.2s;
+    }
+    
+    .list-item:hover {
+        background: #f8f9fa;
+    }
+    
+    .list-item:last-child {
+        border-bottom: none;
+    }
+    
+    .add-item {
+        background: #28a745;
+        color: white;
+        font-weight: bold;
+    }
+    
+    .add-item:hover {
+        background: #218838;
+    }
+    
+    .player-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 12px;
+        margin-bottom: 30px;
+        background: white;
+        padding: 20px;
+        border-radius: 12px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    
+    .player-btn {
+        padding: 16px 0;
+        font-size: 1.2em;
+        border: 2px solid #ddd;
+        border-radius: 8px;
+        background: white;
+        cursor: pointer;
+        transition: all 0.2s;
+        font-weight: bold;
+    }
+    
+    .player-btn:hover {
+        background: #007bff;
+        color: white;
+        border-color: #007bff;
+    }
+    
+    .player-btn.selected {
+        background: #007bff;
+        color: white;
+        border-color: #007bff;
+    }
+    
+    .add-btn {
+        background: #28a745;
+        color: white;
+        border-color: #28a745;
+    }
+    
+    .add-btn:hover {
+        background: #218838;
+        border-color: #218838;
+    }
+    
+    #canvas-container {
+        width: 100%;
+        max-width: 800px;
+        margin: 0 auto 20px;
+        background: white;
+        border-radius: 12px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        overflow: hidden;
+    }
+    
     #canvas-container canvas {
-        width: 100vw;
+        width: 100%;
         height: auto;
         display: block;
     }
-    .selected {
-        border: 2px solid #007bff;
-        background: #e6f0ff;
+    
+    .match-filters {
+        background: white;
+        padding: 20px;
+        border-radius: 12px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        margin-bottom: 20px;
+    }
+    
+    .filter-title {
+        margin-bottom: 15px;
+        font-weight: bold;
+        color: #333;
+    }
+    
+    .match-filter-item {
+        display: flex;
+        align-items: center;
+        padding: 10px;
+        margin-bottom: 8px;
+        background: #f8f9fa;
+        border-radius: 6px;
+        cursor: pointer;
+        transition: background 0.2s;
+    }
+    
+    .match-filter-item:hover {
+        background: #e9ecef;
+    }
+    
+    .match-filter-item.selected {
+        background: #007bff;
+        color: white;
+    }
+    
+    .match-filter-item input[type="checkbox"] {
+        margin-right: 10px;
+        cursor: pointer;
+    }
+    
+    .stats-info {
+        background: white;
+        padding: 20px;
+        border-radius: 12px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        margin-bottom: 20px;
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+        gap: 20px;
+        text-align: center;
+    }
+    
+    .stat-item {
+        padding: 15px;
+        border-radius: 8px;
+        background: #f8f9fa;
+    }
+    
+    .stat-number {
+        font-size: 2em;
+        font-weight: bold;
         color: #007bff;
     }
+    
+    .stat-label {
+        color: #666;
+        font-size: 0.9em;
+        margin-top: 5px;
+    }
+    
+    .instructions {
+        background: #fff3cd;
+        color: #856404;
+        padding: 15px;
+        border-radius: 8px;
+        margin-bottom: 20px;
+        text-align: center;
+    }
+    
+    @media (max-width: 768px) {
+        .section {
+            padding: 10px;
+        }
+        
+        .player-grid {
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
+        }
+        
+        .stats-info {
+            grid-template-columns: repeat(2, 1fr);
+        }
+    }
 </style>
+
+<!-- Menu Section -->
+<div id="menu-section" class="section active">
+    <div class="header">
+        <h1>Shot Tracker</h1>
+    </div>
+    <div class="menu-grid">
+        <div class="menu-item" onclick="showSection('teams-section')">
+            <h3>Teams</h3>
+            <p>Manage teams and players</p>
+        </div>
+        <div class="menu-item" onclick="showSection('matches-section')">
+            <h3>Matches</h3>
+            <p>View all matches</p>
+        </div>
+    </div>
+</div>
+
+<!-- Teams Section -->
+<div id="teams-section" class="section">
+    <div class="header">
+        <button class="back-btn" onclick="showSection('menu-section')">← Back</button>
+        <h2>Teams</h2>
+    </div>
+    <div class="list-container" id="teams-list">
+        <!-- Teams will be populated here -->
+    </div>
+</div>
+
+<!-- Team Detail Section -->
+<div id="team-detail-section" class="section">
+    <div class="header">
+        <button class="back-btn" onclick="showSection('teams-section')">← Back</button>
+        <h2 id="team-detail-title">Team Details</h2>
+    </div>
+    
+    <div class="player-grid" id="team-players-grid">
+        <!-- Player buttons will be populated here -->
+    </div>
+    
+    <div class="list-container" id="team-matches-list">
+        <!-- Team matches will be populated here -->
+    </div>
+</div>
+
+<!-- Match Registration Section -->
+<div id="match-registration-section" class="section">
+    <div class="header">
+        <button class="back-btn" onclick="goBackToTeamDetail()">← Back</button>
+        <h2 id="match-registration-title">Match Registration</h2>
+    </div>
+    
+    <div id="canvas-container"></div>
+    
+    <div style="display: flex; justify-content: center; margin-bottom: 20px;">
+        <button class="back-btn" onclick="resetShot()" style="background: #dc3545; border-color: #dc3545;">
+            🔄 Reset Shot
+        </button>
+    </div>
+    
+    <div class="player-grid" id="match-players-grid">
+        <!-- Player buttons will be populated here -->
+    </div>
+</div>
+
+<!-- Player Statistics Section -->
+<div id="player-stats-section" class="section">
+    <div class="header">
+        <button class="back-btn" onclick="goBackToTeamDetail()">← Back</button>
+        <h2 id="player-stats-title">Player Statistics</h2>
+    </div>
+    
+    <div class="stats-info" id="player-stats-info">
+        <!-- Stats will be populated here -->
+    </div>
+    
+    <div class="match-filters">
+        <div class="filter-title">Filter by matches:</div>
+        <div id="match-filters-list">
+            <!-- Match filters will be populated here -->
+        </div>
+    </div>
+    
+    <div id="canvas-container-stats"></div>
+</div>
+
+<!-- All Matches Section -->
+<div id="matches-section" class="section">
+    <div class="header">
+        <button class="back-btn" onclick="showSection('menu-section')">← Back</button>
+        <h2>All Matches</h2>
+    </div>
+    <div class="list-container" id="all-matches-list">
+        <!-- All matches will be populated here -->
+    </div>
+</div>
+
+<script src="database.js"></script>
+<script src="canvas.js"></script>
+<script src="menu.js"></script>
 <script src="shots.js"></script>
 <script>
     if ('serviceWorker' in navigator) {
@@ -62,7 +390,5 @@
         });
     }
 </script>
-<div id="canvas-container"></div>
-<div id="list"></div>
 </body>
 </html>
