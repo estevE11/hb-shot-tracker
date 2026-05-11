@@ -10,6 +10,7 @@ const AppState = {
     currentMatchTeam: 1, // 1 for team1, 2 for team2
     highlightedShotId: null, // For highlighting a specific shot on canvas
     hoveredShotId: null, // For temporary highlight on hover
+    isAwaitingConfirmation: false, // For Goal/Save popup
     
     // Player selection
     selectedPlayerIndex: null,

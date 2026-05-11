@@ -115,6 +115,62 @@ const CanvasManager = {
         
         // Render current shot being registered
         this.renderCurrentShot();
+
+        // Render Goal/Save popup if awaiting confirmation
+        if (AppState.isAwaitingConfirmation && this.currentShot.points.length === 3) {
+            this.renderGoalSavePopup();
+        }
+    },
+
+    // Render the Goal/Save popup inside the canvas
+    renderGoalSavePopup() {
+        const lastPoint = this.currentShot.points[2];
+        const canvasPoint = this.pitchToCanvas(lastPoint.x, lastPoint.y);
+        
+        const popupW = 120;
+        const popupH = 40;
+        
+        // Ensure popup stays within canvas horizontal bounds
+        const popupX = Math.max(10, Math.min(this.canvas.width - popupW - 10, canvasPoint.x - popupW / 2));
+        
+        // If near the top, show below the point, otherwise show above
+        let popupY = canvasPoint.y - popupH - 15;
+        if (popupY < 10) {
+            popupY = canvasPoint.y + 15;
+        }
+
+        // Draw shadow/background
+        this.ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+        this.ctx.fillRect(popupX + 2, popupY + 2, popupW, popupH);
+
+        // Draw Goal button (Green)
+        this.ctx.fillStyle = '#28a745';
+        this.ctx.fillRect(popupX, popupY, popupW / 2, popupH);
+        
+        // Draw Save button (Red)
+        this.ctx.fillStyle = '#dc3545';
+        this.ctx.fillRect(popupX + popupW / 2, popupY, popupW / 2, popupH);
+
+        // Draw text
+        this.ctx.fillStyle = 'white';
+        this.ctx.font = 'bold 12px Arial';
+        this.ctx.textAlign = 'center';
+        this.ctx.textBaseline = 'middle';
+        this.ctx.fillText('GOAL', popupX + popupW / 4, popupY + popupH / 2);
+        this.ctx.fillText('SAVE', popupX + (3 * popupW) / 4, popupY + popupH / 2);
+
+        // Draw borders
+        this.ctx.strokeStyle = 'white';
+        this.ctx.lineWidth = 2;
+        this.ctx.strokeRect(popupX, popupY, popupW, popupH);
+        this.ctx.beginPath();
+        this.ctx.moveTo(popupX + popupW / 2, popupY);
+        this.ctx.lineTo(popupX + popupW / 2, popupY + popupH);
+        this.ctx.stroke();
+
+        // Reset text alignment
+        this.ctx.textAlign = 'start';
+        this.ctx.textBaseline = 'alphabetic';
     },
     
     // Draw background
@@ -273,6 +329,12 @@ const CanvasManager = {
         const rect = this.canvas.getBoundingClientRect();
         const x = e.clientX - rect.left;
         const y = e.clientY - rect.top;
+
+        // Handle Goal/Save popup clicks
+        if (AppState.isAwaitingConfirmation) {
+            this.handleConfirmationClick(x, y);
+            return;
+        }
         
         const pitchCoords = this.canvasToPitch(x, y);
         
@@ -290,32 +352,62 @@ const CanvasManager = {
         const requiredPoints = isPenalty ? 1 : 3;
         
         if (this.currentShot.points.length >= requiredPoints) {
-            this.completePenaltyShot();
+            this.processShotCompletion();
         }
     },
-    
-    // Complete penalty shot with fixed center point
-    completePenaltyShot() {
+
+    // Handle clicks on the Goal/Save buttons
+    handleConfirmationClick(x, y) {
+        const lastPoint = this.currentShot.points[2];
+        const canvasPoint = this.pitchToCanvas(lastPoint.x, lastPoint.y);
+        
+        const popupW = 120;
+        const popupH = 40;
+        
+        const popupX = Math.max(10, Math.min(this.canvas.width - popupW - 10, canvasPoint.x - popupW / 2));
+        
+        let popupY = canvasPoint.y - popupH - 15;
+        if (popupY < 10) {
+            popupY = canvasPoint.y + 15;
+        }
+
+        // Goal button (left half)
+        if (x >= popupX && x <= popupX + popupW / 2 && y >= popupY && y <= popupY + popupH) {
+            this.currentShot.isGoal = true;
+            AppState.isAwaitingConfirmation = false;
+            this.saveCurrentShot();
+        } 
+        // Save button (right half)
+        else if (x > popupX + popupW / 2 && x <= popupX + popupW && y >= popupY && y <= popupY + popupH) {
+            this.currentShot.isGoal = false;
+            AppState.isAwaitingConfirmation = false;
+            this.saveCurrentShot();
+        }
+    },
+
+    // Logic for completing a shot registration
+    processShotCompletion() {
         if (this.currentShot.shotType === 'penalty' && this.currentShot.points.length === 1) {
-            // Fixed center coordinates (center of the canvas/pitch)
-            const centerX = 0.5; // Center X in pitch coordinates
-            const centerY = 0.79; // Center Y in pitch coordinates
-            
-            // Create complete shot with fixed penalty points + user target
+            const centerX = 0.5;
+            const centerY = 0.79;
             const userPoint = this.currentShot.points[0];
             this.currentShot.points = [
-                { x: centerX, y: centerY },     // Start point (center)
-                { x: centerX, y: centerY },     // Mid point (same as start for penalty)
-                { x: userPoint.x, y: userPoint.y } // End point (user target)
+                { x: centerX, y: centerY },
+                { x: centerX, y: centerY },
+                { x: userPoint.x, y: userPoint.y }
             ];
         }
         
-        // Check if it's a goal (you can customize this logic)
         const targetPoint = this.currentShot.points[2];
-        this.currentShot.isGoal = this.isPointInGoal(targetPoint.x, targetPoint.y);
         
-        // Save to database
-        this.saveCurrentShot();
+        // Only show popup if it's in the goal area
+        if (this.isPointInGoal(targetPoint.x, targetPoint.y)) {
+            AppState.isAwaitingConfirmation = true;
+            this.updateStatus();
+        } else {
+            this.currentShot.isGoal = false;
+            this.saveCurrentShot();
+        }
     },
     
     // Save current shot to database and add to shots list
@@ -375,15 +467,22 @@ const CanvasManager = {
         return await this.async_saveCurrentShot();
     },
     
-    // Check if point is in goal area (customize as needed)
+    // Check if point is in goal area (at either end of the vertical pitch)
     isPointInGoal(x, y) {
-        // Simple goal detection - you can adjust this logic
-        return x > 0.8 && y > 0.3 && y < 0.7;
+        // Based on user calibration:
+        // Top Goal: x between 0.21 and 0.78, y between 0.05 and 0.44
+        const isNearTopGoal = (y >= 0.0 && y <= 0.45) && (x >= 0.20 && x <= 0.80);
+        
+        // Mirrored Bottom Goal (approximate)
+        const isNearBottomGoal = (y >= 0.55 && y <= 1.0) && (x >= 0.20 && x <= 0.80);
+        
+        return isNearTopGoal || isNearBottomGoal;
     },
-    
+
     // Reset current shot
     resetCurrentShot() {
         this.currentShot = { points: [], isGoal: false, shotType: 'static' };
+        AppState.isAwaitingConfirmation = false;
         this.updateStatus();
     },
 
@@ -405,17 +504,24 @@ const CanvasManager = {
 
         statusEl.style.color = '#007bff';
         
+        if (AppState.isAwaitingConfirmation) {
+            statusEl.textContent = `Player ${playerNumber} - ${type}: IS IT A GOAL? (Select on Canvas)`;
+            statusEl.style.color = '#28a745';
+            return;
+        }
+
         if (points === 0) {
             statusEl.textContent = `Player ${playerNumber} - ${type}: Click Shot Origin (Point 1)`;
         } else if (points === 1) {
-            if (this.currentShot.shotType === 'penalty') {
-                statusEl.textContent = `Player ${playerNumber} - ${type}: Confirming Goal...`;
-            } else {
-                statusEl.textContent = `Player ${playerNumber} - ${type}: Click Trajectory (Point 2)`;
-            }
+            statusEl.textContent = `Player ${playerNumber} - ${type}: Click Trajectory (Point 2)`;
         } else if (points === 2) {
             statusEl.textContent = `Player ${playerNumber} - ${type}: Click Target Goal (Point 3)`;
+        } else if (points === 3) {
+            statusEl.textContent = `Player ${playerNumber} - ${type}: Saving...`;
         }
+
+        // Force a render to show popup or status changes
+        this.render();
     },
     
     // Load shots for current context
