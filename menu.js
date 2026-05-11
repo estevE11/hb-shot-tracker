@@ -89,12 +89,24 @@ const MenuManager = {
         if (!name || !name.trim()) return;
         
         // Create team creation modal
-        this.createTeamModal(name.trim());
+        this.openTeamModal(name.trim());
+    },
+
+    // Edit current team
+    async editCurrentTeam() {
+        if (!AppState.currentTeam) return;
+        const team = AppState.currentTeam;
+        const players = await DatabaseManager.getTeamPlayers(team.id);
+        const playerNumbers = players.map(p => p.number).sort((a, b) => a - b).join(',');
+        
+        this.openTeamModal(team.name, playerNumbers, team.id);
     },
     
-    // Create team creation modal
-    createTeamModal(teamName) {
+    // Create/Edit team modal
+    openTeamModal(teamName, initialPlayers = "1,2,3,4,5,6,7,8,9,10", teamId = null) {
+        const isEdit = teamId !== null;
         const modal = document.createElement('div');
+        modal.id = 'team-modal';
         modal.style.cssText = `
             position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
             background: rgba(0,0,0,0.5); display: flex; align-items: center; 
@@ -103,17 +115,17 @@ const MenuManager = {
         
         modal.innerHTML = `
             <div style="background: white; padding: 30px; border-radius: 12px; max-width: 500px; width: 90%; max-height: 80%; overflow-y: auto;">
-                <h3 style="margin-bottom: 20px;">Create Team: ${teamName}</h3>
+                <h3 style="margin-bottom: 20px;">${isEdit ? 'Edit' : 'Create'} Team: <input type="text" id="team-modal-name" value="${teamName}" style="padding: 4px; border: 1px solid #ddd; border-radius: 4px;"></h3>
                 <div style="margin-bottom: 20px;">
                     <label style="display: block; margin-bottom: 10px; font-weight: bold;">Player Numbers:</label>
                     <div style="margin-bottom: 10px; color: #666; font-size: 0.9em;">
                         Enter player numbers separated by commas (e.g., 1,2,3,7,10,15)
                     </div>
                     <input type="text" id="player-numbers" placeholder="1,2,3,4,5,6,7,8,9,10" 
-                           value="1,2,3,4,5,6,7,8,9,10"
+                           value="${initialPlayers}"
                            style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
                     <div id="player-preview" style="margin-top: 10px; padding: 10px; background: #f8f9fa; border-radius: 4px; min-height: 40px;">
-                        <strong>Preview:</strong> <span id="preview-text">1, 2, 3, 4, 5, 6, 7, 8, 9, 10</span>
+                        <strong>Preview:</strong> <span id="preview-text">${initialPlayers}</span>
                     </div>
                 </div>
                 <div style="display: flex; gap: 10px; justify-content: flex-end;">
@@ -121,9 +133,9 @@ const MenuManager = {
                             style="padding: 8px 16px; background: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer;">
                         Cancel
                     </button>
-                    <button onclick="MenuManager.createTeamFromModal('${teamName}')" 
+                    <button onclick="MenuManager.saveTeamFromModal(${teamId})" 
                             style="padding: 8px 16px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer;">
-                        Create Team
+                        ${isEdit ? 'Update' : 'Create'} Team
                     </button>
                 </div>
             </div>
@@ -151,10 +163,16 @@ const MenuManager = {
             .filter((num, index, arr) => arr.indexOf(num) === index); // Remove duplicates
     },
     
-    // Create team from modal
-    async createTeamFromModal(teamName) {
+    // Save team from modal (handles both Create and Update)
+    async saveTeamFromModal(teamId = null) {
+        const teamName = document.getElementById('team-modal-name').value;
         const input = document.getElementById('player-numbers').value;
         const playerNumbers = this.parsePlayerNumbers(input);
+        
+        if (!teamName || !teamName.trim()) {
+            alert('Please enter a team name.');
+            return;
+        }
         
         if (playerNumbers.length === 0) {
             alert('Please enter at least one valid player number.');
@@ -162,16 +180,31 @@ const MenuManager = {
         }
         
         try {
-            await DatabaseManager.addTeam(teamName, playerNumbers);
+            if (teamId) {
+                // Update existing team
+                await DatabaseManager.updateTeam(teamId, teamName, playerNumbers);
+                // Update AppState if it's the current team
+                if (AppState.currentTeam && AppState.currentTeam.id === teamId) {
+                    AppState.currentTeam.name = teamName;
+                }
+            } else {
+                // Create new team
+                await DatabaseManager.addTeam(teamName, playerNumbers);
+            }
             
             // Remove modal
-            document.querySelector('div[style*="position: fixed"]').remove();
+            const modal = document.getElementById('team-modal');
+            if (modal) modal.remove();
             
-            // Reload teams list
-            this.loadTeams();
+            // Reload views
+            if (teamId && AppState.currentSection === 'team-detail-section') {
+                this.loadTeamDetail(AppState.currentTeam);
+            } else {
+                this.loadTeams();
+            }
         } catch (error) {
-            console.error('Error creating team:', error);
-            alert('Error creating team. Please try again.');
+            console.error('Error saving team:', error);
+            alert('Error saving team. Please try again.');
         }
     },
     

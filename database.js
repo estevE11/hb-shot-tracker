@@ -54,6 +54,39 @@ const DatabaseManager = {
         return await db.teams.get(id);
     },
     
+    async updateTeam(id, name, playerNumbers) {
+        try {
+            await db.teams.update(id, {
+                name: name.trim()
+            });
+            
+            // Sync players: get current, then add/remove as needed
+            const currentPlayers = await this.getTeamPlayers(id);
+            const currentNumbers = currentPlayers.map(p => p.number);
+            
+            // Add new ones
+            const toAdd = playerNumbers.filter(num => !currentNumbers.includes(num));
+            const addPromises = toAdd.map(number => 
+                db.players.add({
+                    team_id: id,
+                    number: number
+                })
+            );
+            
+            // Remove old ones (Careful: shots are linked by player_number, so removing a player from the "roster" 
+            // doesn't delete their shots, but they won't appear in the current registration grid anymore)
+            const toRemove = currentPlayers.filter(p => !playerNumbers.includes(p.number));
+            const removePromises = toRemove.map(p => db.players.delete(p.id));
+            
+            await Promise.all([...addPromises, ...removePromises]);
+            
+            return true;
+        } catch (error) {
+            console.error('Error updating team:', error);
+            throw error;
+        }
+    },
+    
     async getTeamPlayers(teamId) {
         return await db.players.where('team_id').equals(teamId).toArray();
     },
