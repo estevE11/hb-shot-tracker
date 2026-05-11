@@ -8,6 +8,8 @@ const AppState = {
     selectedMatchFilters: new Set(),
     selectedShotTypeFilters: new Set(), // For filtering by shot type in player stats
     currentMatchTeam: 1, // 1 for team1, 2 for team2
+    highlightedShotId: null, // For highlighting a specific shot on canvas
+    hoveredShotId: null, // For temporary highlight on hover
     
     // Player selection
     selectedPlayerIndex: null,
@@ -100,6 +102,41 @@ function toggleAllShotTypes() {
 
 function toggleShotTypeFilter(shotType) {
     MenuManager.toggleShotTypeFilter(shotType);
+}
+
+// Shot management functions
+function highlightShot(shotId) {
+    if (AppState.highlightedShotId === shotId) {
+        AppState.highlightedShotId = null;
+    } else {
+        AppState.highlightedShotId = shotId;
+    }
+    
+    // Update the UI list to show selection
+    MenuManager.updateMatchShotList();
+    CanvasManager.render();
+}
+
+function hoverShot(shotId) {
+    AppState.hoveredShotId = shotId;
+    CanvasManager.render();
+}
+
+async function deleteShot(shotId) {
+    if (confirm('Are you sure you want to delete this shot?')) {
+        try {
+            await DatabaseManager.deleteShot(shotId);
+            if (AppState.highlightedShotId === shotId) {
+                AppState.highlightedShotId = null;
+            }
+            // Reload shots and UI
+            await CanvasManager.loadShots();
+            await MenuManager.updateMatchShotList();
+            CanvasManager.render();
+        } catch (error) {
+            alert('Error deleting shot');
+        }
+    }
 }
 
 // Matches functions

@@ -322,12 +322,16 @@
 </div>
 
 <!-- Match Registration Section -->
-<div id="match-registration-section" class="section">
+    <div id="match-registration-section" class="section">
     <div class="header">
         <button class="back-btn" onclick="goBackToTeamDetail()">← Back</button>
         <h2 id="match-registration-title">Match Registration</h2>
     </div>
     
+    <div id="shot-status" style="text-align: center; margin-bottom: 10px; font-weight: bold; color: #007bff; min-height: 20px;">
+        Select a player to start
+    </div>
+
     <div id="canvas-container"></div>
     
     <div style="display: flex; justify-content: center; gap: 10px; margin-bottom: 20px;">
@@ -346,6 +350,13 @@
     
     <div class="player-grid" id="match-players-grid">
         <!-- Player buttons will be populated here -->
+    </div>
+
+    <div id="match-shot-list-container" style="margin-top: 20px;">
+        <h3 style="margin-bottom: 10px;">Player Shot History</h3>
+        <div class="list-container" id="match-shot-list">
+            <!-- Shot list will be populated here -->
+        </div>
     </div>
 </div>
 

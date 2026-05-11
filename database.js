@@ -134,5 +134,15 @@ const DatabaseManager = {
         }
         
         return shots;
+    },
+
+    async deleteShot(shotId) {
+        try {
+            await db.shots.delete(shotId);
+            return true;
+        } catch (error) {
+            console.error('Error deleting shot:', error);
+            throw error;
+        }
     }
 }; 

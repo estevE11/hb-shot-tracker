@@ -390,6 +390,10 @@ const MenuManager = {
             CanvasManager.initializeCanvas('canvas-container');
             await CanvasManager.loadShots();
             
+            // Initialize status and shot list
+            CanvasManager.updateStatus();
+            await this.updateMatchShotList();
+            
             // Initialize shot type buttons
             this.updateShotTypeButtons();
         } catch (error) {
@@ -401,6 +405,7 @@ const MenuManager = {
     swapTeam() {
         AppState.currentMatchTeam = AppState.currentMatchTeam === 1 ? 2 : 1;
         AppState.selectedPlayerIndex = null; // Reset player selection when swapping teams
+        AppState.highlightedShotId = null; // Reset highlight
         CanvasManager.resetCurrentShot(); // Reset current shot when swapping teams
         this.loadMatchRegistration(AppState.currentMatch);
     },
@@ -408,7 +413,119 @@ const MenuManager = {
     // Select player
     selectPlayer(index) {
         AppState.selectedPlayerIndex = index;
-        this.loadMatchRegistration(AppState.currentMatch);
+        AppState.highlightedShotId = null; // Reset highlight
+        
+        // If we're already in registration section, just refresh the components
+        if (AppState.currentSection === 'match-registration-section') {
+            this.refreshMatchRegistration();
+        } else {
+            this.loadMatchRegistration(AppState.currentMatch);
+        }
+    },
+
+    // Refresh only the necessary parts of the registration view
+    async refreshMatchRegistration() {
+        try {
+            const match = AppState.currentMatch;
+            const team1 = await DatabaseManager.getTeam(match.team1_id);
+            const team2 = await DatabaseManager.getTeam(match.team2_id);
+            const currentTeamId = AppState.currentMatchTeam === 1 ? match.team1_id : match.team2_id;
+            const currentTeamPlayers = await DatabaseManager.getTeamPlayers(currentTeamId);
+            const playerNumbers = currentTeamPlayers.map(p => p.number).sort((a, b) => a - b);
+            
+            AppState.gridNumbers = playerNumbers;
+            
+            // Refresh player buttons
+            const playersGrid = document.getElementById('match-players-grid');
+            const currentTeamData = AppState.currentMatchTeam === 1 ? team1 : team2;
+            const otherTeamData = AppState.currentMatchTeam === 1 ? team2 : team1;
+            
+            let playersHtml = `
+                <div style="grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: center; 
+                            padding: 15px; background: #f8f9fa; border-radius: 8px; margin-bottom: 15px;">
+                    <div style="font-weight: bold; color: #007bff;">
+                        Current: ${currentTeamData.name}
+                    </div>
+                    <button class="player-btn" onclick="MenuManager.swapTeam()" 
+                            style="padding: 8px 16px; font-size: 0.9em; background: #17a2b8; border-color: #17a2b8; color: white;">
+                        Switch to ${otherTeamData.name}
+                    </button>
+                </div>
+            `;
+            
+            playerNumbers.forEach((number, index) => {
+                const selectedClass = (index === AppState.selectedPlayerIndex) ? 'selected' : '';
+                playersHtml += `
+                    <button class="player-btn ${selectedClass}" onclick="MenuManager.selectPlayer(${index})">
+                        ${number}
+                    </button>
+                `;
+            });
+            playersGrid.innerHTML = playersHtml;
+
+            // Refresh shots and status
+            await CanvasManager.loadShots();
+            CanvasManager.updateStatus();
+            await this.updateMatchShotList();
+        } catch (error) {
+            console.error('Error refreshing match registration:', error);
+        }
+    },
+
+    // Update the shot list for the current player in match registration
+    async updateMatchShotList() {
+        const listContainer = document.getElementById('match-shot-list');
+        if (!listContainer) return;
+
+        if (AppState.selectedPlayerIndex === null) {
+            listContainer.innerHTML = '<div class="list-item" style="text-align: center; color: #666;">Select a player to see their history</div>';
+            return;
+        }
+
+        const currentTeamId = AppState.currentMatchTeam === 1 ? 
+            AppState.currentMatch.team1_id : AppState.currentMatch.team2_id;
+        const playerNumber = AppState.gridNumbers[AppState.selectedPlayerIndex];
+
+        try {
+            const shots = await DatabaseManager.getShotsForMatch(AppState.currentMatch.id, currentTeamId);
+            const playerShots = shots.filter(shot => shot.player_number === playerNumber)
+                                     .sort((a, b) => b.created_at - a.created_at);
+
+            if (playerShots.length === 0) {
+                listContainer.innerHTML = '<div class="list-item" style="text-align: center; color: #666;">No shots recorded yet</div>';
+                return;
+            }
+
+            let html = '';
+            playerShots.forEach(shot => {
+                const typeLabel = shot.shot_type === 'penalty' ? '7m' : 
+                                 shot.shot_type === 'counter' ? 'Fast' : 'Static';
+                const resultLabel = shot.goal ? 'GOAL' : 'SAVE';
+                const resultColor = shot.goal ? '#28a745' : '#dc3545';
+                const isHighlighted = AppState.highlightedShotId === shot.id;
+                
+                html += `
+                    <div class="list-item" 
+                         style="background: ${isHighlighted ? '#e7f3ff' : 'white'}" 
+                         onclick="highlightShot(${shot.id})"
+                         onmouseenter="hoverShot(${shot.id})"
+                         onmouseleave="hoverShot(null)">
+                        <div style="display: flex; align-items: center; gap: 10px; flex: 1;">
+                            <span style="font-weight: bold; width: 50px;">${typeLabel}</span>
+                            <span style="color: ${resultColor}; font-weight: bold; width: 60px;">${resultLabel}</span>
+                            <span style="color: #666; font-size: 0.8em;">${new Date(shot.created_at).toLocaleTimeString()}</span>
+                        </div>
+                        <button onclick="event.stopPropagation(); deleteShot(${shot.id})" 
+                                style="padding: 4px 8px; background: #dc3545; color: white; border: none; border-radius: 4px; font-size: 12px; cursor: pointer;">
+                            Delete
+                        </button>
+                    </div>
+                `;
+            });
+            listContainer.innerHTML = html;
+        } catch (error) {
+            console.error('Error updating match shot list:', error);
+        }
     },
     
     // Load player statistics page

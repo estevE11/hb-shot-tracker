@@ -40,15 +40,21 @@ const CanvasManager = {
         const container = document.getElementById(containerId);
         if (!container) return;
         
-        container.innerHTML = '';
+        // Check if canvas already exists in this container
+        let canvas = container.querySelector('canvas');
+        if (!canvas) {
+            container.innerHTML = '';
+            this.canvas = document.createElement('canvas');
+            container.appendChild(this.canvas);
+            
+            this.canvas.addEventListener('click', this.handleCanvasClick.bind(this));
+            this.canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+        } else {
+            this.canvas = canvas;
+        }
         
-        this.canvas = document.createElement('canvas');
         this.ctx = this.canvas.getContext('2d');
-        container.appendChild(this.canvas);
-        
         this.resizeCanvas();
-        this.canvas.addEventListener('click', this.handleCanvasClick.bind(this));
-        this.canvas.addEventListener('contextmenu', (e) => e.preventDefault());
         
         // Start render loop
         this.startRenderLoop();
@@ -154,14 +160,27 @@ const CanvasManager = {
             shotColor = '#4CAF50'; // Green for counter
         }
         
+        const isHighlighted = AppState.highlightedShotId === shot.id;
+        const isHovered = AppState.hoveredShotId === shot.id;
+        const shouldHighlight = isHighlighted || isHovered;
+        
         // Draw trajectory
         this.ctx.beginPath();
         this.ctx.moveTo(p0.x, p0.y);
         this.ctx.lineTo(p1.x, p1.y);
         this.ctx.lineTo(p2.x, p2.y);
-        this.ctx.strokeStyle = shot.goal ? 'green' : 'red';
-        this.ctx.lineWidth = 3;
+        this.ctx.strokeStyle = shot.goal ? (shouldHighlight ? '#00FF00' : 'green') : (shouldHighlight ? '#FF0000' : 'red');
+        this.ctx.lineWidth = shouldHighlight ? 6 : 3;
+        
+        if (shouldHighlight) {
+            this.ctx.shadowBlur = 10;
+            this.ctx.shadowColor = 'white';
+        }
+        
         this.ctx.stroke();
+        
+        // Reset shadow
+        this.ctx.shadowBlur = 0;
         
         // Draw points with shot type colors
         this.renderCircle(p0.x, p0.y, shotColor); // Start point with shot type color
@@ -194,7 +213,18 @@ const CanvasManager = {
             const canvasPoint = this.pitchToCanvas(point.x, point.y);
             const colors = [shotColor, '#2196F3', '#FF9800']; // Start with shot type color, then Blue, Amber
             this.renderCircle(canvasPoint.x, canvasPoint.y, colors[index]);
+            
+            // Draw point number
+            this.ctx.fillStyle = 'white';
+            this.ctx.font = 'bold 12px Arial';
+            this.ctx.textAlign = 'center';
+            this.ctx.textBaseline = 'middle';
+            this.ctx.fillText(index + 1, canvasPoint.x, canvasPoint.y);
         });
+        
+        // Reset text align for other renders
+        this.ctx.textAlign = 'start';
+        this.ctx.textBaseline = 'alphabetic';
         
         // Draw lines between points
         if (points.length >= 2) {
@@ -253,6 +283,7 @@ const CanvasManager = {
         
         // Add point to current shot
         this.currentShot.points.push(pitchCoords);
+        this.updateStatus();
         
         // Check if shot is complete
         const isPenalty = this.currentShot.shotType === 'penalty';
@@ -288,7 +319,7 @@ const CanvasManager = {
     },
     
     // Save current shot to database and add to shots list
-    async saveCurrentShot() {
+    async async_saveCurrentShot() {
         if (this.currentShot.points.length < 3) return;
         
         const currentTeamId = AppState.currentMatchTeam === 1 ? 
@@ -298,29 +329,37 @@ const CanvasManager = {
         
         // Save to database
         try {
-            await DatabaseManager.addShot(
+            const p0 = this.currentShot.points[0];
+            const p1 = this.currentShot.points[1];
+            const p2 = this.currentShot.points[2];
+
+            const result = await DatabaseManager.addShot(
                 AppState.currentMatch.id,
                 currentTeamId,
                 playerNumber,
-                this.currentShot.points[0].x, this.currentShot.points[0].y,
-                this.currentShot.points[1].x, this.currentShot.points[1].y,
-                this.currentShot.points[2].x, this.currentShot.points[2].y,
+                p0.x, p0.y,
+                p1.x, p1.y,
+                p2.x, p2.y,
                 this.currentShot.isGoal,
                 this.currentShot.shotType
             );
             
-            // Add to shots list for immediate rendering
+            // Add to shots list for immediate rendering with correct types (Numbers)
             this.shotsList.push({
-                x0: this.currentShot.points[0].x,
-                y0: this.currentShot.points[0].y,
-                x1: this.currentShot.points[1].x,
-                y1: this.currentShot.points[1].y,
-                x2: this.currentShot.points[2].x,
-                y2: this.currentShot.points[2].y,
+                id: result,
+                x0: Number(p0.x),
+                y0: Number(p0.y),
+                x1: Number(p1.x),
+                y1: Number(p1.y),
+                x2: Number(p2.x),
+                y2: Number(p2.y),
                 goal: this.currentShot.isGoal,
                 player_number: playerNumber,
                 shot_type: this.currentShot.shotType
             });
+
+            // Update UI list
+            await MenuManager.updateMatchShotList();
             
         } catch (error) {
             console.error('Error saving shot:', error);
@@ -328,6 +367,12 @@ const CanvasManager = {
         
         // Reset current shot
         this.resetCurrentShot();
+        this.render(); // Force immediate render
+    },
+    
+    // Original method rename to keep consistency if called elsewhere
+    async saveCurrentShot() {
+        return await this.async_saveCurrentShot();
     },
     
     // Check if point is in goal area (customize as needed)
@@ -339,6 +384,38 @@ const CanvasManager = {
     // Reset current shot
     resetCurrentShot() {
         this.currentShot = { points: [], isGoal: false, shotType: 'static' };
+        this.updateStatus();
+    },
+
+    // Update status text
+    updateStatus() {
+        const statusEl = document.getElementById('shot-status');
+        if (!statusEl) return;
+
+        if (AppState.selectedPlayerIndex === null) {
+            statusEl.textContent = 'Select a player to start';
+            statusEl.style.color = '#dc3545';
+            return;
+        }
+
+        const playerNumber = AppState.gridNumbers[AppState.selectedPlayerIndex];
+        const points = this.currentShot.points.length;
+        const type = this.currentShot.shotType === 'penalty' ? 'Penalty (7m)' : 
+                     this.currentShot.shotType === 'counter' ? 'Counter' : 'Static';
+
+        statusEl.style.color = '#007bff';
+        
+        if (points === 0) {
+            statusEl.textContent = `Player ${playerNumber} - ${type}: Click Shot Origin (Point 1)`;
+        } else if (points === 1) {
+            if (this.currentShot.shotType === 'penalty') {
+                statusEl.textContent = `Player ${playerNumber} - ${type}: Confirming Goal...`;
+            } else {
+                statusEl.textContent = `Player ${playerNumber} - ${type}: Click Trajectory (Point 2)`;
+            }
+        } else if (points === 2) {
+            statusEl.textContent = `Player ${playerNumber} - ${type}: Click Target Goal (Point 3)`;
+        }
     },
     
     // Load shots for current context
@@ -363,6 +440,7 @@ const CanvasManager = {
                 const playerShots = shots.filter(shot => shot.player_number === selectedPlayerNumber);
                 
                 this.shotsList = playerShots.map(shot => ({
+                    id: shot.id,
                     x0: Number(shot.x0),
                     y0: Number(shot.y0),
                     x1: Number(shot.x1),
@@ -417,6 +495,7 @@ const CanvasManager = {
         // Only allow setting shot type if no points are registered yet
         if (this.currentShot.points.length === 0) {
             this.currentShot.shotType = type;
+            this.updateStatus();
         }
     },
     
