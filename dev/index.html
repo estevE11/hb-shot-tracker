@@ -1,0 +1,287 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <title>Shot Tracker</title>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#152d31" />
+    <link rel="manifest" href="manifest.json" />
+    <link rel="apple-touch-icon" href="icons/icon192.png" />
+    <script src="lib/dexie.js"></script>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app-bar">
+      <button class="brand" onclick="showSection('menu-section')">
+        <span class="brand-mark">↗</span> COURTSIDE
+        <span class="brand-sub">SHOT TRACKER</span></button
+      ><span class="local-badge">● Saved on this device</span>
+    </div>
+    <main>
+      <section id="menu-section" class="section active">
+        <div class="page-heading">
+          <p class="eyebrow">YOUR HANDBALL WORKSPACE</p>
+          <h1>Every shot.<br /><span>A clearer picture.</span></h1>
+          <p class="lead">
+            Capture the game. Understand your players.<br />Bring the next match
+            into focus.
+          </p>
+        </div>
+        <div class="home-layout">
+          <div class="hero-card">
+            <div>
+              <span class="eyebrow">FROM THE SIDELINE</span>
+              <h2>Ready for the<br />next whistle?</h2>
+              <p>
+                Choose your teams, select a player,<br />and trace the shot.
+              </p>
+              <button class="primary-btn" onclick="MenuManager.addMatch()">
+                ＋ New match <span>↗</span>
+              </button>
+            </div>
+            <svg class="court-art" viewBox="0 0 240 280" aria-hidden="true">
+              <rect x="20" y="20" width="200" height="240" rx="2" />
+              <path
+                d="M20 140h200M85 20v16h70V20M60 20v25a60 60 0 0 0 120 0V20M40 20v25a80 80 0 0 0 160 0V20M60 260v-25a60 60 0 0 1 120 0v25M85 260v-16h70v16"
+              />
+              <circle cx="120" cy="140" r="28" />
+              <path class="art-shot" d="M66 180l35-86 37-54" />
+              <circle class="art-dot" cx="66" cy="180" r="6" />
+              <circle class="art-dot" cx="138" cy="40" r="6" />
+            </svg>
+          </div>
+          <div class="home-links">
+            <button class="menu-item" onclick="showSection('teams-section')">
+              <span class="card-icon">01 / ROSTER</span>
+              <h3>Teams & players <span>↗</span></h3>
+              <p>Manage your roster. Explore player statistics.</p>
+              <span id="home-team-count" class="card-count"
+                >Your team workspace</span
+              ></button
+            ><button class="menu-item" onclick="showSection('matches-section')">
+              <span class="card-icon">02 / MATCHDAY</span>
+              <h3>Match library <span>↗</span></h3>
+              <p>Pick up a match and keep tracking.</p>
+              <span id="home-match-count" class="card-count"
+                >Your match workspace</span
+              >
+            </button>
+          </div>
+        </div>
+        <div class="section-heading">
+          <h2>Recent matches</h2>
+          <button class="text-btn" onclick="showSection('matches-section')">
+            View all →
+          </button>
+        </div>
+        <div id="recent-matches" class="list-container"></div>
+        <p class="device-note">
+          Your teams and shots stay in this browser on this device.
+        </p>
+      </section>
+      <!-- Teams Section -->
+      <div id="teams-section" class="section">
+        <div class="header">
+          <button class="back-btn" onclick="showSection('menu-section')">
+            ← Back
+          </button>
+          <h2>Teams & players</h2>
+        </div>
+        <div class="list-container" id="teams-list">
+          <!-- Teams will be populated here -->
+        </div>
+      </div>
+
+      <!-- Team Detail Section -->
+      <div id="team-detail-section" class="section">
+        <div class="header">
+          <button class="back-btn" onclick="showSection('teams-section')">
+            ← Back
+          </button>
+          <h2 id="team-detail-title">Team Details</h2>
+          <button
+            class="back-btn"
+            style="background: #17a2b8; margin-left: auto"
+            onclick="MenuManager.editCurrentTeam()"
+          >
+            Edit Team
+          </button>
+        </div>
+
+        <p class="section-help">
+          Select a player to explore their shot map and statistics.
+        </p>
+        <div class="player-grid" id="team-players-grid">
+          <!-- Player buttons will be populated here -->
+        </div>
+
+        <div class="list-container" id="team-matches-list">
+          <!-- Team matches will be populated here -->
+        </div>
+      </div>
+
+      <!-- Match Registration Section -->
+      <div id="match-registration-section" class="section">
+        <div class="header">
+          <button class="back-btn" onclick="goBackToTeamDetail()">
+            ← Back
+          </button>
+          <h2 id="match-registration-title">Match Registration</h2>
+        </div>
+
+        <div class="tracking-layout">
+          <aside class="roster-panel">
+            <div class="section-heading">
+              <h3>1. Select a player</h3>
+              <span class="eyebrow">ROSTER</span>
+            </div>
+            <div class="player-grid" id="match-players-grid"></div>
+            <p class="section-help">
+              Choose a number, then tap the court to trace a shot.
+            </p>
+          </aside>
+          <div class="court-panel">
+            <div class="section-heading">
+              <h3>2. Track the shot</h3>
+              <button class="text-btn" onclick="ExportManager.open()">
+                Export ↗
+              </button>
+            </div>
+            <div id="shot-status" role="status" aria-live="polite">
+              Select a player to start
+            </div>
+            <div class="shot-toolbar">
+              <span>Shot type</span
+              ><button
+                id="penalty-btn"
+                class="back-btn"
+                onclick="togglePenalty()"
+              >
+                7m penalty</button
+              ><button
+                id="counter-btn"
+                class="back-btn"
+                onclick="toggleCounter()"
+              >
+                Fast break</button
+              ><button class="text-btn" onclick="resetShot()">↶ Reset</button>
+            </div>
+            <div id="canvas-container"></div>
+            <div class="court-legend">
+              <span><i class="goal-dot"></i>Goal</span
+              ><span><i class="miss-dot"></i>Save / miss</span
+              ><span>Tap origin → trajectory → target</span>
+            </div>
+          </div>
+        </div>
+        <div id="match-shot-list-container" style="margin-top: 20px">
+          <h3 style="margin-bottom: 10px">Player Shot History</h3>
+          <div class="list-container" id="match-shot-list">
+            <!-- Shot list will be populated here -->
+          </div>
+        </div>
+      </div>
+
+      <!-- Player Statistics Section -->
+      <div id="player-stats-section" class="section">
+        <div class="header">
+          <button class="back-btn" onclick="goBackToTeamDetail()">
+            ← Back
+          </button>
+          <h2 id="player-stats-title">Player Statistics</h2>
+          <button class="primary-btn" onclick="ExportManager.open()">
+            Export ↗
+          </button>
+        </div>
+
+        <div class="stats-info" id="player-stats-info">
+          <!-- Stats will be populated here -->
+        </div>
+
+        <details class="match-filters">
+          <summary class="filter-title">
+            Matches <span>Choose matches to compare</span>
+          </summary>
+          <div id="match-filters-list">
+            <!-- Match filters will be populated here -->
+          </div>
+        </details>
+
+        <div class="match-filters shot-filters">
+          <div class="filter-title">Shot type</div>
+          <div id="shot-type-filters-list">
+            <div
+              class="match-filter-item selected"
+              onclick="toggleAllShotTypes()"
+            >
+              <input type="checkbox" checked />
+              <span>All Shots</span>
+            </div>
+            <div
+              class="match-filter-item"
+              onclick="toggleShotTypeFilter('static')"
+            >
+              <input type="checkbox" />
+              <span>Static Play</span>
+            </div>
+            <div
+              class="match-filter-item"
+              onclick="toggleShotTypeFilter('penalty')"
+            >
+              <input type="checkbox" />
+              <span>Penalty (7m)</span>
+            </div>
+            <div
+              class="match-filter-item"
+              onclick="toggleShotTypeFilter('counter')"
+            >
+              <input type="checkbox" />
+              <span>Counter Attack</span>
+            </div>
+          </div>
+        </div>
+
+        <div id="canvas-container-stats"></div>
+      </div>
+
+      <!-- All Matches Section -->
+      <div id="matches-section" class="section">
+        <div class="header">
+          <button class="back-btn" onclick="showSection('menu-section')">
+            ← Back
+          </button>
+          <h2>Match library</h2>
+          <button class="primary-btn" onclick="MenuManager.addMatch()">
+            ＋ New match
+          </button>
+        </div>
+        <div class="list-container" id="all-matches-list">
+          <!-- All matches will be populated here -->
+        </div>
+      </div>
+    </main>
+    <div id="toast" role="status" aria-live="polite" hidden></div>
+    <script src="database.js"></script>
+    <script src="canvas.js"></script>
+    <script src="menu.js"></script>
+    <script src="export.js"></script>
+    <script src="shots.js"></script>
+    <script>
+      if ("serviceWorker" in navigator) {
+        window.addEventListener("load", () => {
+          navigator.serviceWorker
+            .register("./sw.js")
+            .then((registration) => {
+              console.log("ServiceWorker registration successful");
+            })
+            .catch((err) => {
+              console.log("ServiceWorker registration failed: ", err);
+            });
+        });
+      }
+    </script>
+  </body>
+</html>
