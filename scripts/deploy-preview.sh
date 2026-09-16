@@ -29,6 +29,6 @@ git -C "$publish_dir" add .
 if ! git -C "$publish_dir" diff --cached --quiet; then
   git -C "$publish_dir" commit -m "deploy: publish dev preview ${preview_ref:0:7}"
 fi
-git -C "$publish_dir" push origin HEAD:gh-pages
+git -C "$publish_dir" push origin HEAD:refs/heads/gh-pages
 gh api --method PUT repos/estevE11/hb-shot-tracker/pages -f 'source[branch]=gh-pages' -f 'source[path]=/' >/dev/null
 echo 'Preview: https://esteve11.github.io/hb-shot-tracker/dev/'
