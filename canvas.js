@@ -28,11 +28,12 @@ const CanvasManager = {
         // Load background image
         this.bg.onload = () => {
             this.bgLoaded = true;
+            this.render();
         };
         this.bg.onerror = () => {
             this.bgLoaded = false;
         };
-        this.bg.src = 'hbpitch.png';
+        this.bg.src = 'court.svg';
     },
     
     // Initialize canvas
@@ -55,6 +56,9 @@ const CanvasManager = {
         
         this.ctx = this.canvas.getContext('2d');
         this.resizeCanvas();
+        this.resizeObserver?.disconnect();
+        this.resizeObserver = new ResizeObserver(() => { if (container.clientWidth) { this.resizeCanvas(); this.render(); } });
+        this.resizeObserver.observe(container);
         
         // Start render loop
         this.startRenderLoop();
@@ -127,8 +131,8 @@ const CanvasManager = {
         const lastPoint = this.currentShot.points[2];
         const canvasPoint = this.pitchToCanvas(lastPoint.x, lastPoint.y);
         
-        const popupW = 120;
-        const popupH = 40;
+        const popupW = 160;
+        const popupH = 48;
         
         // Ensure popup stays within canvas horizontal bounds
         const popupX = Math.max(10, Math.min(this.canvas.width - popupW - 10, canvasPoint.x - popupW / 2));
@@ -216,8 +220,8 @@ const CanvasManager = {
             shotColor = '#4CAF50'; // Green for counter
         }
         
-        const isHighlighted = AppState.highlightedShotId === shot.id;
-        const isHovered = AppState.hoveredShotId === shot.id;
+        const isHighlighted = !this.cleanReport && AppState.highlightedShotId === shot.id;
+        const isHovered = !this.cleanReport && AppState.hoveredShotId === shot.id;
         const shouldHighlight = isHighlighted || isHovered;
         
         // Draw trajectory
@@ -321,14 +325,15 @@ const CanvasManager = {
     
     // Handle canvas clicks
     handleCanvasClick(e) {
+        if (AppState.currentSection !== 'match-registration-section' || this.saving) return;
         if (AppState.selectedPlayerIndex === null) {
             alert('Please select a player number before registering a shot.');
             return;
         }
         
         const rect = this.canvas.getBoundingClientRect();
-        const x = e.clientX - rect.left;
-        const y = e.clientY - rect.top;
+        const x = (e.clientX - rect.left) * this.canvas.width / rect.width;
+        const y = (e.clientY - rect.top) * this.canvas.height / rect.height;
 
         // Handle Goal/Save popup clicks
         if (AppState.isAwaitingConfirmation) {
@@ -361,8 +366,8 @@ const CanvasManager = {
         const lastPoint = this.currentShot.points[2];
         const canvasPoint = this.pitchToCanvas(lastPoint.x, lastPoint.y);
         
-        const popupW = 120;
-        const popupH = 40;
+        const popupW = 160;
+        const popupH = 48;
         
         const popupX = Math.max(10, Math.min(this.canvas.width - popupW - 10, canvasPoint.x - popupW / 2));
         
@@ -412,7 +417,8 @@ const CanvasManager = {
     
     // Save current shot to database and add to shots list
     async async_saveCurrentShot() {
-        if (this.currentShot.points.length < 3) return;
+        if (this.currentShot.points.length < 3 || this.saving) return;
+        this.saving = true;
         
         const currentTeamId = AppState.currentMatchTeam === 1 ? 
             AppState.currentMatch.team1_id : AppState.currentMatch.team2_id;
@@ -455,8 +461,14 @@ const CanvasManager = {
             
         } catch (error) {
             console.error('Error saving shot:', error);
+            MenuManager.showToast('Shot could not be saved. Tap the court to retry.');
+            AppState.isAwaitingConfirmation = true;
+            this.saving = false;
+            return;
         }
         
+        this.saving = false;
+        MenuManager.showToast('Shot saved');
         // Reset current shot
         this.resetCurrentShot();
         this.render(); // Force immediate render
@@ -481,9 +493,11 @@ const CanvasManager = {
 
     // Reset current shot
     resetCurrentShot() {
+        if (this.saving) return;
         this.currentShot = { points: [], isGoal: false, shotType: 'static' };
         AppState.isAwaitingConfirmation = false;
         this.updateStatus();
+        MenuManager.updateShotTypeButtons();
     },
 
     // Update status text
@@ -492,7 +506,7 @@ const CanvasManager = {
         if (!statusEl) return;
 
         if (AppState.selectedPlayerIndex === null) {
-            statusEl.textContent = 'Select a player to start';
+            statusEl.textContent = 'Select a shirt number above to start';
             statusEl.style.color = '#dc3545';
             return;
         }
@@ -505,17 +519,19 @@ const CanvasManager = {
         statusEl.style.color = '#007bff';
         
         if (AppState.isAwaitingConfirmation) {
-            statusEl.textContent = `Player ${playerNumber} - ${type}: IS IT A GOAL? (Select on Canvas)`;
+            statusEl.textContent = `Player ${playerNumber} - ${type}: Goal or save? Choose on the court`;
             statusEl.style.color = '#28a745';
             return;
         }
 
-        if (points === 0) {
-            statusEl.textContent = `Player ${playerNumber} - ${type}: Click Shot Origin (Point 1)`;
+        if (points === 0 && this.currentShot.shotType === 'penalty') {
+            statusEl.textContent = `Player ${playerNumber} · 7m: Tap target · 1 of 1`;
+        } else if (points === 0) {
+            statusEl.textContent = `Player ${playerNumber} - ${type}: Tap origin · 1 of 3`;
         } else if (points === 1) {
-            statusEl.textContent = `Player ${playerNumber} - ${type}: Click Trajectory (Point 2)`;
+            statusEl.textContent = `Player ${playerNumber} - ${type}: Tap trajectory · 2 of 3`;
         } else if (points === 2) {
-            statusEl.textContent = `Player ${playerNumber} - ${type}: Click Target Goal (Point 3)`;
+            statusEl.textContent = `Player ${playerNumber} - ${type}: Tap target · 3 of 3`;
         } else if (points === 3) {
             statusEl.textContent = `Player ${playerNumber} - ${type}: Saving...`;
         }

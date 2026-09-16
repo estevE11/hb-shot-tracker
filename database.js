@@ -1,5 +1,5 @@
 // Database setup and operations
-const db = new Dexie('ShotTrackerDB');
+const db = new Dexie(location.pathname.includes('/dev/') ? 'ShotTrackerDB-dev' : 'ShotTrackerDB');
 db.version(1).stores({
     teams: '++id, name, created_at',
     players: '++id, team_id, number, [team_id+number]',

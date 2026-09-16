@@ -36,6 +36,8 @@ const App = {
             
         } catch (error) {
             console.error('Application initialization error:', error);
+            document.querySelector('.local-badge').textContent = 'Storage unavailable';
+            document.getElementById('recent-matches').innerHTML = '<div class="empty-state"><strong>Could not open device storage.</strong>Allow browser storage, then reload to use Shot Tracker.</div>';
         }
     }
 };

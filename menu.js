@@ -1,12 +1,39 @@
+const escapeHTML = value => String(value).replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
 // Menu and navigation functionality
 const MenuManager = {
     // Initialize menu system
     init() {
-        // Menu system initialized
+        // Make dynamically rendered list actions keyboard accessible.
+        new MutationObserver(() => {
+            document.querySelectorAll('.list-item[onclick], .match-filter-item[onclick]').forEach(item => {
+                item.tabIndex = 0;
+                item.setAttribute('role', 'button');
+                if (item.classList.contains('match-filter-item')) {
+                    item.setAttribute('aria-pressed', item.classList.contains('selected'));
+                    const checkbox = item.querySelector('input');
+                    if (checkbox) { checkbox.tabIndex = -1; checkbox.setAttribute('aria-hidden', 'true'); }
+                }
+                item.onkeydown = event => {
+                    if (event.target === item && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); item.click(); }
+                };
+            });
+        }).observe(document.querySelector('main'), {childList: true, subtree: true});
     },
     
     // Show a specific section
     showSection(sectionId, data = null) {
+        if (CanvasManager.saving) return;
+        if (sectionId !== AppState.currentSection) {
+            CanvasManager.resetCurrentShot();
+            AppState.highlightedShotId = null;
+            AppState.hoveredShotId = null;
+            if (sectionId === 'match-registration-section') AppState.selectedPlayerIndex = null;
+            if (sectionId === 'player-stats-section') {
+                AppState.selectedMatchFilters.clear();
+                AppState.selectedShotTypeFilters.clear();
+            }
+        }
+        window.scrollTo(0, 0);
         // Hide all sections
         document.querySelectorAll('.section').forEach(section => {
             section.classList.remove('active');
@@ -18,6 +45,9 @@ const MenuManager = {
         
         // Load section-specific data
         switch(sectionId) {
+            case 'menu-section':
+                this.loadHome();
+                break;
             case 'teams-section':
                 this.loadTeams();
                 break;
@@ -68,10 +98,10 @@ const MenuManager = {
             `;
             
             teams.forEach(team => {
-                const teamJson = JSON.stringify(team).replace(/"/g, '&quot;');
+                const teamJson = escapeHTML(JSON.stringify(team));
                 html += `
                     <div class="list-item" onclick="MenuManager.showSection('team-detail-section', ${teamJson})">
-                        <span>${team.name}</span>
+                        <span>${escapeHTML(team.name)}</span>
                         <span style="color: #666; font-size: 0.9em;">${new Date(team.created_at).toLocaleDateString()}</span>
                     </div>
                 `;
@@ -83,13 +113,33 @@ const MenuManager = {
         }
     },
     
-    // Add new team
-    async addTeam() {
-        const name = prompt('Enter team name:');
-        if (!name || !name.trim()) return;
-        
-        // Create team creation modal
-        this.openTeamModal(name.trim());
+    async loadHome() {
+        const [teams, matches] = await Promise.all([DatabaseManager.getTeams(), DatabaseManager.getMatches()]);
+        document.getElementById('home-team-count').textContent = `${teams.length} teams in your roster`;
+        document.getElementById('home-match-count').textContent = `${matches.length} matches recorded`;
+        const names = Object.fromEntries(teams.map(team => [team.id, team.name]));
+        document.getElementById('recent-matches').innerHTML = matches.length ? matches.slice(0, 3).map(match => `<div class="list-item" onclick="MenuManager.viewMatchDetails(${match.id})"><div><strong>${escapeHTML(match.name)}</strong><p class="preview-roster">${escapeHTML(names[match.team1_id] || 'Team 1')} vs ${escapeHTML(names[match.team2_id] || 'Team 2')}</p></div><span>${new Date(match.date).toLocaleDateString()} ↗</span></div>`).join('') : '<div class="empty-state"><strong>Your next match starts here.</strong>Add two teams to your roster, then create a match to start tracking.</div>';
+    },
+
+    addTeam() { this.openTeamModal(''); },
+
+    showToast(message) {
+        const toast = document.getElementById('toast');
+        toast.textContent = message; toast.hidden = false;
+        clearTimeout(this.toastTimer);
+        this.toastTimer = setTimeout(() => { toast.hidden = true; }, 4000);
+    },
+
+    openDialog(id, content) {
+        document.getElementById(id)?.remove();
+        const dialog = document.createElement('dialog');
+        dialog.id = id;
+        dialog.innerHTML = content;
+        dialog.setAttribute('aria-labelledby', `${id}-title`);
+        dialog.addEventListener('close', () => dialog.remove());
+        document.body.append(dialog);
+        dialog.showModal();
+        return dialog;
     },
 
     // Edit current team
@@ -103,62 +153,19 @@ const MenuManager = {
     },
     
     // Create/Edit team modal
-    openTeamModal(teamName, initialPlayers = "1,2,3,4,5,6,7,8,9,10", teamId = null) {
-        const isEdit = teamId !== null;
-        const modal = document.createElement('div');
-        modal.id = 'team-modal';
-        modal.style.cssText = `
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
-            background: rgba(0,0,0,0.5); display: flex; align-items: center; 
-            justify-content: center; z-index: 1000;
-        `;
-        
-        modal.innerHTML = `
-            <div style="background: white; padding: 30px; border-radius: 12px; max-width: 500px; width: 90%; max-height: 80%; overflow-y: auto;">
-                <h3 style="margin-bottom: 20px;">${isEdit ? 'Edit' : 'Create'} Team: <input type="text" id="team-modal-name" value="${teamName}" style="padding: 4px; border: 1px solid #ddd; border-radius: 4px;"></h3>
-                <div style="margin-bottom: 20px;">
-                    <label style="display: block; margin-bottom: 10px; font-weight: bold;">Player Numbers:</label>
-                    <div style="margin-bottom: 10px; color: #666; font-size: 0.9em;">
-                        Enter player numbers separated by commas (e.g., 1,2,3,7,10,15)
-                    </div>
-                    <input type="text" id="player-numbers" placeholder="1,2,3,4,5,6,7,8,9,10" 
-                           value="${initialPlayers}"
-                           style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
-                    <div id="player-preview" style="margin-top: 10px; padding: 10px; background: #f8f9fa; border-radius: 4px; min-height: 40px;">
-                        <strong>Preview:</strong> <span id="preview-text">${initialPlayers}</span>
-                    </div>
-                </div>
-                <div style="display: flex; gap: 10px; justify-content: flex-end;">
-                    <button onclick="this.closest('div').parentElement.remove()" 
-                            style="padding: 8px 16px; background: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer;">
-                        Cancel
-                    </button>
-                    <button onclick="MenuManager.saveTeamFromModal(${teamId})" 
-                            style="padding: 8px 16px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer;">
-                        ${isEdit ? 'Update' : 'Create'} Team
-                    </button>
-                </div>
-            </div>
-        `;
-        
-        document.body.appendChild(modal);
-        
-        // Add real-time preview
-        const input = modal.querySelector('#player-numbers');
-        const previewText = modal.querySelector('#preview-text');
-        
-        input.addEventListener('input', () => {
-            const numbers = this.parsePlayerNumbers(input.value);
-            previewText.textContent = numbers.length > 0 ? numbers.join(', ') : 'No valid numbers';
-            previewText.style.color = numbers.length > 0 ? '#333' : '#dc3545';
-        });
+    openTeamModal(teamName, initialPlayers = '1,2,3,4,5,6,7,8,9,10', teamId = null) {
+        const dialog = this.openDialog('team-modal', `<form id="team-form"><h2 id="team-modal-title">${teamId ? 'Edit team' : 'Build your roster'}</h2><p>Add a team and its shirt numbers. You can update these later.</p><label for="team-modal-name">Team name</label><input id="team-modal-name" required maxlength="80" placeholder="e.g. Barcelona" value="${escapeHTML(teamName)}"><label for="player-numbers">Shirt numbers</label><input id="player-numbers" required value="${escapeHTML(initialPlayers)}" aria-describedby="player-preview"><div id="player-preview" class="preview-roster">Separate numbers with commas. Use 1–99.<br><span id="preview-text"></span></div><div class="form-error" role="alert"></div><div class="modal-actions"><button type="button" class="back-btn" onclick="this.closest('dialog').close()">Cancel</button><button class="primary-btn" type="submit">${teamId ? 'Save changes' : 'Create team'}</button></div></form>`);
+        dialog.querySelector('form').onsubmit = event => { event.preventDefault(); this.saveTeamFromModal(teamId); };
+        const input = dialog.querySelector('#player-numbers');
+        input.oninput = () => { dialog.querySelector('#preview-text').textContent = this.parsePlayerNumbers(input.value).join(' · '); };
+        input.oninput();
     },
-    
+
     // Parse player numbers from input
     parsePlayerNumbers(input) {
         return input.split(',')
-            .map(num => parseInt(num.trim()))
-            .filter(num => !isNaN(num) && num > 0)
+            .map(num => /^\d+$/.test(num.trim()) ? Number(num.trim()) : NaN)
+            .filter(num => Number.isInteger(num) && num > 0 && num <= 99)
             .sort((a, b) => a - b)
             .filter((num, index, arr) => arr.indexOf(num) === index); // Remove duplicates
     },
@@ -168,17 +175,20 @@ const MenuManager = {
         const teamName = document.getElementById('team-modal-name').value;
         const input = document.getElementById('player-numbers').value;
         const playerNumbers = this.parsePlayerNumbers(input);
+        const submit = document.querySelector('#team-modal [type=submit]');
+        if (submit.disabled) return;
         
         if (!teamName || !teamName.trim()) {
-            alert('Please enter a team name.');
+            document.querySelector('#team-modal .form-error').textContent = 'Please enter a team name.';
             return;
         }
         
         if (playerNumbers.length === 0) {
-            alert('Please enter at least one valid player number.');
+            document.querySelector('#team-modal .form-error').textContent = 'Enter at least one shirt number between 1 and 99.';
             return;
         }
         
+        submit.disabled = true;
         try {
             if (teamId) {
                 // Update existing team
@@ -194,17 +204,18 @@ const MenuManager = {
             
             // Remove modal
             const modal = document.getElementById('team-modal');
-            if (modal) modal.remove();
+            if (modal) modal.close();
             
             // Reload views
             if (teamId && AppState.currentSection === 'team-detail-section') {
                 this.loadTeamDetail(AppState.currentTeam);
             } else {
-                this.loadTeams();
+                this.showSection('teams-section');
             }
         } catch (error) {
             console.error('Error saving team:', error);
-            alert('Error saving team. Please try again.');
+            document.querySelector('#team-modal .form-error').textContent = 'Could not save this team. Please try again.';
+            submit.disabled = false;
         }
     },
     
@@ -223,7 +234,7 @@ const MenuManager = {
             
             playerNumbers.forEach((number, index) => {
                 playersHtml += `
-                    <button class="player-btn" onclick="MenuManager.showPlayerStats(${team.id}, ${number}, '${team.name}')">
+                    <button class="player-btn" onclick="MenuManager.showPlayerStats(${team.id}, ${number}, AppState.currentTeam.name)">
                         ${number}
                     </button>
                 `;
@@ -250,12 +261,12 @@ const MenuManager = {
             
             matches.forEach(match => {
                 const opponent = match.team1_id === team.id ? teamMap[match.team2_id] : teamMap[match.team1_id];
-                const matchJson = JSON.stringify(match).replace(/"/g, '&quot;');
+                const matchJson = escapeHTML(JSON.stringify(match));
                 matchesHtml += `
                     <div class="list-item" onclick="MenuManager.showSection('match-registration-section', ${matchJson})">
                         <div>
-                            <div style="font-weight: bold;">${match.name}</div>
-                            <div style="color: #666; font-size: 0.9em;">vs ${opponent}</div>
+                            <div style="font-weight: bold;">${escapeHTML(match.name)}</div>
+                            <div style="color: #666; font-size: 0.9em;">vs ${escapeHTML(opponent)}</div>
                         </div>
                         <span style="color: #666; font-size: 0.9em;">${new Date(match.date).toLocaleDateString()}</span>
                     </div>
@@ -268,101 +279,51 @@ const MenuManager = {
         }
     },
     
-    // Add new match
     async addMatch() {
-        const name = prompt('Enter match name:');
-        if (!name || !name.trim()) return;
-        
-        try {
-            const teams = await DatabaseManager.getTeams();
-            if (teams.length < 2) {
-                alert('You need at least 2 teams to create a match.');
-                return;
-            }
-            
-            // Create team selection modal
-            this.createMatchModal(name.trim(), teams);
-        } catch (error) {
-            console.error('Error adding match:', error);
-        }
-    },
-    
-    // Create match selection modal
-    createMatchModal(matchName, teams) {
-        let teamOptions = '';
-        teams.forEach(team => {
-            teamOptions += `<option value="${team.id}">${team.name}</option>`;
-        });
-        
-        const modal = document.createElement('div');
-        modal.style.cssText = `
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
-            background: rgba(0,0,0,0.5); display: flex; align-items: center; 
-            justify-content: center; z-index: 1000;
-        `;
-        
-        modal.innerHTML = `
-            <div style="background: white; padding: 30px; border-radius: 12px; max-width: 400px; width: 90%;">
-                <h3 style="margin-bottom: 20px;">Create Match: ${matchName}</h3>
-                <div style="margin-bottom: 15px;">
-                    <label style="display: block; margin-bottom: 5px; font-weight: bold;">Team 1:</label>
-                    <select id="team1-select" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
-                        ${teamOptions}
-                    </select>
-                </div>
-                <div style="margin-bottom: 20px;">
-                    <label style="display: block; margin-bottom: 5px; font-weight: bold;">Team 2:</label>
-                    <select id="team2-select" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
-                        ${teamOptions}
-                    </select>
-                </div>
-                <div style="margin-bottom: 20px;">
-                    <label style="display: block; margin-bottom: 5px; font-weight: bold;">Date:</label>
-                    <input type="date" id="match-date" value="${new Date().toISOString().split('T')[0]}" 
-                           style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
-                </div>
-                <div style="display: flex; gap: 10px; justify-content: flex-end;">
-                    <button onclick="this.closest('div').parentElement.remove()" 
-                            style="padding: 8px 16px; background: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer;">
-                        Cancel
-                    </button>
-                    <button onclick="MenuManager.createMatchFromModal('${matchName}')" 
-                            style="padding: 8px 16px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer;">
-                        Create Match
-                    </button>
-                </div>
-            </div>
-        `;
-        
-        document.body.appendChild(modal);
-    },
-    
-    // Create match from modal
-    async createMatchFromModal(matchName) {
-        const team1Id = parseInt(document.getElementById('team1-select').value);
-        const team2Id = parseInt(document.getElementById('team2-select').value);
-        const matchDate = document.getElementById('match-date').value;
-        
-        if (team1Id === team2Id) {
-            alert('Please select two different teams.');
+        const teams = await DatabaseManager.getTeams();
+        if (teams.length < 2) {
+            this.showSection('teams-section');
+            this.showToast('Add two teams before starting your first match.');
             return;
         }
-        
+        this.createMatchModal('', teams);
+    },
+
+    createMatchModal(matchName, teams) {
+        const options = teams.map(team => `<option value="${team.id}">${escapeHTML(team.name)}</option>`).join('');
+        const today = new Date();
+        const date = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+        const dialog = this.openDialog('match-modal', `<form><h2 id="match-modal-title">Start a match</h2><p>Set up the fixture, then jump straight into tracking.</p><label for="match-name">Match name</label><input id="match-name" required maxlength="100" placeholder="e.g. Saturday league · Round 4"><label for="team1-select">Your team</label><select id="team1-select">${options}</select><label for="team2-select">Opponent</label><select id="team2-select">${options}</select><label for="match-date">Match date</label><input id="match-date" type="date" required value="${date}"><div class="form-error" role="alert"></div><div class="modal-actions"><button type="button" class="back-btn" onclick="this.closest('dialog').close()">Cancel</button><button class="primary-btn" type="submit">Start tracking →</button></div></form>`);
+        const first = dialog.querySelector('#team1-select');
+        const second = dialog.querySelector('#team2-select');
+        first.value = AppState.currentTeam?.id || teams[0].id;
+        second.value = teams.find(team => team.id !== Number(first.value)).id;
+        dialog.querySelector('form').onsubmit = event => { event.preventDefault(); this.createMatchFromModal(); };
+    },
+
+    async createMatchFromModal() {
+        const dialog = document.getElementById('match-modal');
+        const team1Id = Number(dialog.querySelector('#team1-select').value);
+        const team2Id = Number(dialog.querySelector('#team2-select').value);
+        const name = dialog.querySelector('#match-name').value.trim();
+        const date = dialog.querySelector('#match-date').value;
+        if (team1Id === team2Id || !name || !date) {
+            dialog.querySelector('.form-error').textContent = 'Enter a name, date, and two different teams.';
+            return;
+        }
+        const submit = dialog.querySelector('[type=submit]');
+        submit.disabled = true;
         try {
-            await DatabaseManager.addMatch(team1Id, team2Id, matchName, matchDate);
-            
-            // Remove modal
-            document.querySelector('div[style*="position: fixed"]').remove();
-            
-            // Reload current team detail if we're in team view
-            if (AppState.currentTeam) {
-                this.loadTeamDetail(AppState.currentTeam);
-            }
+            const id = await DatabaseManager.addMatch(team1Id, team2Id, name, date + 'T12:00:00');
+            AppState.currentTeam = await DatabaseManager.getTeam(team1Id);
+            dialog.close();
+            this.showSection('match-registration-section', await DatabaseManager.getMatch(id));
         } catch (error) {
-            console.error('Error creating match:', error);
+            dialog.querySelector('.form-error').textContent = 'Could not save this match. Please try again.';
+            submit.disabled = false;
         }
     },
-    
+
     // Show player statistics
     showPlayerStats(teamId, playerNumber, teamName) {
         const playerData = {
@@ -396,22 +357,13 @@ const MenuManager = {
             const otherTeamData = AppState.currentMatchTeam === 1 ? team2 : team1;
             
             let playersHtml = `
-                <div style="grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: center; 
-                            padding: 15px; background: #f8f9fa; border-radius: 8px; margin-bottom: 15px;">
-                    <div style="font-weight: bold; color: #007bff;">
-                        Current: ${currentTeamData.name}
-                    </div>
-                    <button class="player-btn" onclick="MenuManager.swapTeam()" 
-                            style="padding: 8px 16px; font-size: 0.9em; background: #17a2b8; border-color: #17a2b8; color: white;">
-                        Switch to ${otherTeamData.name}
-                    </button>
-                </div>
+                <div class="team-switch"><strong>${escapeHTML(currentTeamData.name)}</strong><button class="text-btn" onclick="MenuManager.swapTeam()">⇄ ${escapeHTML(otherTeamData.name)}</button></div>
             `;
             
             playerNumbers.forEach((number, index) => {
                 const selectedClass = (index === AppState.selectedPlayerIndex) ? 'selected' : '';
                 playersHtml += `
-                    <button class="player-btn ${selectedClass}" onclick="MenuManager.selectPlayer(${index})">
+                    <button class="player-btn ${selectedClass}" aria-pressed="${index === AppState.selectedPlayerIndex}" onclick="MenuManager.selectPlayer(${index})">
                         ${number}
                     </button>
                 `;
@@ -436,6 +388,7 @@ const MenuManager = {
     
     // Swap teams in match
     swapTeam() {
+        if (CanvasManager.saving) return;
         AppState.currentMatchTeam = AppState.currentMatchTeam === 1 ? 2 : 1;
         AppState.selectedPlayerIndex = null; // Reset player selection when swapping teams
         AppState.highlightedShotId = null; // Reset highlight
@@ -445,6 +398,8 @@ const MenuManager = {
     
     // Select player
     selectPlayer(index) {
+        if (CanvasManager.saving) return;
+        CanvasManager.resetCurrentShot();
         AppState.selectedPlayerIndex = index;
         AppState.highlightedShotId = null; // Reset highlight
         
@@ -474,22 +429,13 @@ const MenuManager = {
             const otherTeamData = AppState.currentMatchTeam === 1 ? team2 : team1;
             
             let playersHtml = `
-                <div style="grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: center; 
-                            padding: 15px; background: #f8f9fa; border-radius: 8px; margin-bottom: 15px;">
-                    <div style="font-weight: bold; color: #007bff;">
-                        Current: ${currentTeamData.name}
-                    </div>
-                    <button class="player-btn" onclick="MenuManager.swapTeam()" 
-                            style="padding: 8px 16px; font-size: 0.9em; background: #17a2b8; border-color: #17a2b8; color: white;">
-                        Switch to ${otherTeamData.name}
-                    </button>
-                </div>
+                <div class="team-switch"><strong>${escapeHTML(currentTeamData.name)}</strong><button class="text-btn" onclick="MenuManager.swapTeam()">⇄ ${escapeHTML(otherTeamData.name)}</button></div>
             `;
             
             playerNumbers.forEach((number, index) => {
                 const selectedClass = (index === AppState.selectedPlayerIndex) ? 'selected' : '';
                 playersHtml += `
-                    <button class="player-btn ${selectedClass}" onclick="MenuManager.selectPlayer(${index})">
+                    <button class="player-btn ${selectedClass}" aria-pressed="${index === AppState.selectedPlayerIndex}" onclick="MenuManager.selectPlayer(${index})">
                         ${number}
                     </button>
                 `;
@@ -533,7 +479,7 @@ const MenuManager = {
             playerShots.forEach(shot => {
                 const typeLabel = shot.shot_type === 'penalty' ? '7m' : 
                                  shot.shot_type === 'counter' ? 'Fast' : 'Static';
-                const resultLabel = shot.goal ? 'GOAL' : 'SAVE';
+                const resultLabel = shot.goal ? 'GOAL' : 'MISS';
                 const resultColor = shot.goal ? '#28a745' : '#dc3545';
                 const isHighlighted = AppState.highlightedShotId === shot.id;
                 
@@ -588,7 +534,7 @@ const MenuManager = {
                 filtersHtml += `
                     <div class="match-filter-item ${isSelected ? 'selected' : ''}" onclick="MenuManager.toggleMatchFilter(${match.id})">
                         <input type="checkbox" ${isSelected ? 'checked' : ''}>
-                        <span>${match.name} vs ${opponent}</span>
+                        <span>${escapeHTML(match.name)} vs ${escapeHTML(opponent)}</span>
                     </div>
                 `;
             });
@@ -618,7 +564,8 @@ const MenuManager = {
             const shots = await DatabaseManager.getShotsForPlayer(
                 playerData.teamId, 
                 playerData.playerNumber, 
-                matchIds
+                matchIds,
+                AppState.selectedShotTypeFilters.size ? Array.from(AppState.selectedShotTypeFilters) : null
             );
             
             this.displayStats(shots);
@@ -689,6 +636,7 @@ const MenuManager = {
                 <div class="stat-number">${counterAccuracy}%</div>
                 <div class="stat-label">Counter Accuracy</div>
             </div>
+            <p class="breakdown">Static: ${staticGoals}/${staticShots.length} · ${staticAccuracy}% &nbsp; / &nbsp; 7m: ${penaltyGoals}/${penaltyShots.length} · ${penaltyAccuracy}% &nbsp; / &nbsp; Fast break: ${counterGoals}/${counterShots.length} · ${counterAccuracy}%</p>
         `;
     },
     
@@ -709,8 +657,7 @@ const MenuManager = {
         }
         
         if (AppState.currentPlayer) {
-            await this.updatePlayerStats(AppState.currentPlayer);
-            await CanvasManager.loadShots(); // Reload shots with new filter
+            await this.loadPlayerStats(AppState.currentPlayer);
         }
     },
     
@@ -731,8 +678,8 @@ const MenuManager = {
                 html += `
                     <div class="list-item" onclick="MenuManager.viewMatchDetails(${match.id})">
                         <div>
-                            <div style="font-weight: bold;">${match.name}</div>
-                            <div style="color: #666; font-size: 0.9em;">${team1Name} vs ${team2Name}</div>
+                            <div style="font-weight: bold;">${escapeHTML(match.name)}</div>
+                            <div style="color: #666; font-size: 0.9em;">${escapeHTML(team1Name)} vs ${escapeHTML(team2Name)}</div>
                         </div>
                         <span style="color: #666; font-size: 0.9em;">${new Date(match.date).toLocaleDateString()}</span>
                     </div>
@@ -740,7 +687,7 @@ const MenuManager = {
             });
             
             if (matches.length === 0) {
-                html = '<div class="list-item" style="text-align: center; color: #666;">No matches found</div>';
+                html = '<div class="list-item" style="text-align: center; color: #666;">No matches yet. Create a match to start tracking.</div>';
             }
             
             matchesList.innerHTML = html;
@@ -754,6 +701,7 @@ const MenuManager = {
         try {
             const match = await DatabaseManager.getMatch(matchId);
             if (match) {
+                AppState.currentTeam = await DatabaseManager.getTeam(match.team1_id);
                 this.showSection('match-registration-section', match);
             }
         } catch (error) {
@@ -798,6 +746,8 @@ const MenuManager = {
         const penaltyEnabled = CanvasManager.isPenaltyButtonEnabled();
         const counterEnabled = CanvasManager.isCounterButtonEnabled();
         
+        penaltyBtn.setAttribute('aria-pressed', currentType === 'penalty');
+        counterBtn.setAttribute('aria-pressed', currentType === 'counter');
         // Update penalty button
         penaltyBtn.disabled = !penaltyEnabled;
         penaltyBtn.style.opacity = penaltyEnabled ? '1' : '0.5';
